@@ -1,0 +1,183 @@
+{
+  "projectType": "saas",
+  "projectName": "Activepieces",
+  "projectDescription": "Open source AI-powered workflow automation platform with 280+ integrations and MCP server support",
+  "theme": "mint",
+  "primaryColor": "#9675FF",
+  "lightColor": "#9675FF",
+  "darkColor": "#9675FF",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Overview",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/workflows",
+              "concepts/pieces",
+              "concepts/mcp-servers",
+              "concepts/ai-agents"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Workflows",
+        "groups": [
+          {
+            "group": "Building Workflows",
+            "pages": [
+              "workflows/building-flows",
+              "workflows/passing-data",
+              "workflows/loops-branches",
+              "workflows/error-handling"
+            ]
+          },
+          {
+            "group": "Managing Workflows",
+            "pages": [
+              "workflows/publishing",
+              "workflows/versioning",
+              "workflows/debugging",
+              "workflows/templates"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Deployment",
+        "groups": [
+          {
+            "group": "Installation",
+            "pages": [
+              "deployment/overview",
+              "deployment/docker",
+              "deployment/docker-compose",
+              "deployment/kubernetes"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "deployment/environment-variables",
+              "deployment/database",
+              "deployment/storage",
+              "deployment/scaling"
+            ]
+          },
+          {
+            "group": "Architecture",
+            "pages": [
+              "deployment/architecture",
+              "deployment/workers",
+              "deployment/engine"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Build Pieces",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "pieces/introduction",
+              "pieces/setup-development",
+              "pieces/create-piece",
+              "pieces/authentication"
+            ]
+          },
+          {
+            "group": "Development",
+            "pages": [
+              "pieces/create-action",
+              "pieces/create-trigger",
+              "pieces/properties",
+              "pieces/testing"
+            ]
+          },
+          {
+            "group": "Publishing",
+            "pages": [
+              "pieces/contribute",
+              "pieces/private-pieces",
+              "pieces/versioning"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Admin Guide",
+        "groups": [
+          {
+            "group": "Platform Management",
+            "pages": [
+              "admin/projects",
+              "admin/users-permissions",
+              "admin/sso",
+              "admin/pieces-management"
+            ]
+          },
+          {
+            "group": "Security",
+            "pages": [
+              "admin/security-practices",
+              "admin/secret-managers",
+              "admin/audit-logs"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api/introduction",
+              "api/authentication"
+            ]
+          },
+          {
+            "group": "Endpoints",
+            "pages": [
+              "api/flows",
+              "api/flow-runs",
+              "api/projects",
+              "api/connections"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Visual workflow builder with drag-and-drop interface",
+    "280+ pre-built integrations (Pieces) for popular services",
+    "MCP server support for AI agents (Claude, Cursor, Windsurf)",
+    "AI-powered automation with native AI pieces",
+    "Type-safe piece framework in TypeScript",
+    "Self-hosted deployment with full data control",
+    "Enterprise features: SSO, RBAC, audit logs",
+    "Embeddable workflow builder for white-label solutions",
+    "Human-in-the-loop approvals and forms",
+    "Hot reloading for local piece development"
+  ],
+  "publicApiSurface": [
+    "REST API - Flows, Projects, Connections, Users",
+    "Pieces Framework - TypeScript SDK for building integrations",
+    "Embed SDK - JavaScript SDK for embedding workflows",
+    "CLI - pieces-cli for piece management",
+    "MCP Servers - 280+ tools for AI agents",
+    "Webhook Triggers",
+    "OAuth2 Connections"
+  ]
+}

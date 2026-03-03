@@ -1,0 +1,450 @@
+---
+title: Passing Data Between Steps
+description: Learn how to access step outputs, use variables, and map data in your workflows
+icon: 'arrow-right-arrow-left'
+---
+
+One of the most powerful features in Activepieces is the ability to pass data between steps. This guide explains how to reference step outputs, use expressions, and map data throughout your workflow.
+
+## Understanding Step Outputs
+
+Every step in your workflow produces an output that subsequent steps can access. The output structure depends on the step type.
+
+### Accessing Step Outputs
+
+Use the mustache syntax `{{ stepName.property }}` to reference data from previous steps:
+
+```typescript
+// If you have a step named "get_user" that returns:
+{
+  "id": "123",
+  "name": "John Doe",
+  "email": "john@example.com"
+}
+
+// Access the data in later steps:
+{{ get_user.name }}          // "John Doe"
+{{ get_user.email }}         // "john@example.com"
+{{ get_user.id }}            // "123"
+```
+
+<Note>
+Step names are automatically generated as `step_1`, `step_2`, etc., but you can rename them to something more meaningful like `get_user` or `send_email`.
+</Note>
+
+## Variable Types
+
+Activepieces supports several types of variables you can use in your workflows:
+
+### 1. Step Outputs
+
+Access data from any previous step:
+
+```typescript
+{{ trigger.body.name }}           // Data from the trigger
+{{ send_http.body.results }}      // HTTP response data
+{{ transform_data.output }}        // Code action output
+```
+
+### 2. Loop Variables
+
+When inside a loop, access iteration data:
+
+```typescript
+// From packages/server/engine/test/handler/flow-looping.test.ts
+{
+  "type": "LOOP_ON_ITEMS",
+  "settings": {
+    "items": "{{ [4, 5, 6] }}"  // Array to iterate over
+  },
+  "firstLoopAction": {
+    "name": "process_item",
+    "settings": {
+      "input": {
+        "currentItem": "{{ loop.item }}",   // Current item
+        "index": "{{ loop.index }}",         // Current index (1-based)
+        "iteration": "{{ loop.iterations }}" // All iterations
+      }
+    }
+  }
+}
+```
+
+<CardGroup cols={3}>
+  <Card title="loop.item" icon="circle-dot">
+    The current item being processed
+  </Card>
+  <Card title="loop.index" icon="hashtag">
+    Current iteration number (1-based)
+  </Card>
+  <Card title="loop.iterations" icon="list">
+    Array of all completed iterations
+  </Card>
+</CardGroup>
+
+### 3. Connections
+
+Reference saved connection credentials:
+
+```typescript
+{{ connections.my_database.host }}
+{{ connections.my_database.username }}
+```
+
+### 4. Router/Branch Data
+
+Access branch evaluation results:
+
+```typescript
+// Router output from packages/server/engine/test/handler/flow-branching.test.ts
+{
+  "router": {
+    "output": {
+      "branches": [
+        {
+          "branchIndex": 1,
+          "branchName": "Test Branch",
+          "evaluation": true  // Condition result
+        }
+      ]
+    }
+  }
+}
+```
+
+## Using Expressions
+
+Activepieces supports JavaScript expressions within the mustache syntax:
+
+### String Operations
+
+```typescript
+// Concatenation
+{{ trigger.firstName + " " + trigger.lastName }}
+
+// Template literals
+{{ `Hello, ${trigger.name}!` }}
+
+// String methods
+{{ trigger.email.toLowerCase() }}
+{{ trigger.name.toUpperCase() }}
+{{ trigger.text.substring(0, 10) }}
+```
+
+### Number Operations
+
+```typescript
+// Arithmetic
+{{ trigger.price * 1.1 }}           // Add 10%
+{{ trigger.quantity + 5 }}
+{{ (trigger.total - trigger.discount).toFixed(2) }}
+
+// Comparisons
+{{ trigger.age >= 18 }}
+{{ trigger.score > 100 }}
+```
+
+### Array Operations
+
+```typescript
+// Map, filter, and more
+{{ trigger.items.map(item => item.name) }}
+{{ trigger.users.filter(user => user.active) }}
+{{ trigger.numbers.reduce((sum, n) => sum + n, 0) }}
+
+// Array access
+{{ trigger.items[0] }}              // First item
+{{ trigger.items.length }}          // Array length
+```
+
+### Object Operations
+
+```typescript
+// Access nested properties
+{{ trigger.user.profile.address.city }}
+
+// Spread operator
+{{ { ...trigger.user, updated: true } }}
+
+// Object methods
+{{ Object.keys(trigger.data) }}
+{{ Object.values(trigger.metadata) }}
+```
+
+## Data Mapping Examples
+
+### Example 1: Transform API Response
+
+<Steps>
+  <Step title="HTTP Request Step">
+    A step named `fetch_users` makes an API call:
+
+    ```json
+    {
+      "status": 200,
+      "body": {
+        "users": [
+          {"id": 1, "name": "Alice", "active": true},
+          {"id": 2, "name": "Bob", "active": false},
+          {"id": 3, "name": "Charlie", "active": true}
+        ]
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Filter Active Users">
+    Create a code action to filter:
+
+    ```javascript
+    export const code = async (inputs) => {
+      const users = inputs.allUsers;
+      return users.filter(user => user.active);
+    };
+    ```
+
+    Input configuration:
+    ```json
+    {
+      "allUsers": "{{ fetch_users.body.users }}"
+    }
+    ```
+  </Step>
+
+  <Step title="Use Filtered Data">
+    Reference the filtered results:
+
+    ```typescript
+    {{ filter_users.output }}  // [{id: 1, name: "Alice", ...}, ...]
+    ```
+  </Step>
+</Steps>
+
+### Example 2: Loop Over Items
+
+```typescript
+// Loop configuration from test suite
+{
+  "name": "process_orders",
+  "type": "LOOP_ON_ITEMS",
+  "settings": {
+    "items": "{{ fetch_orders.body.results }}"  // Array from previous step
+  },
+  "firstLoopAction": {
+    "name": "send_confirmation",
+    "type": "PIECE",
+    "settings": {
+      "pieceName": "@activepieces/piece-gmail",
+      "actionName": "send_email",
+      "input": {
+        "to": "{{ loop.item.customer.email }}",
+        "subject": "Order #{{ loop.item.orderNumber }} Confirmed",
+        "body": "Thank you for order #{{ loop.index }}!"
+      }
+    }
+  }
+}
+```
+
+### Example 3: Conditional Data
+
+Use ternary operators for conditional values:
+
+```typescript
+// Set priority based on score
+{{ trigger.score > 80 ? 'High' : trigger.score > 50 ? 'Medium' : 'Low' }}
+
+// Default values
+{{ trigger.name || 'Unknown' }}
+{{ trigger.count ?? 0 }}
+```
+
+## Testing Data Flow
+
+When you test a workflow, you can inspect data at each step:
+
+<Tabs>
+  <Tab title="Test Flow">
+    Click **Test Flow** to run your workflow with sample data.
+
+    ```typescript
+    // From packages/web/src/app/builder/flow-canvas/widgets/test-flow-widget.tsx
+    const { mutate: runFlow } = flowHooks.useTestFlowOrStartManualTrigger({
+      flowVersionId: flowVersion.id,
+      onUpdateRun: (response) => {
+        // Each step's output is captured
+        const steps = response.flowRun.steps;
+        // { step_1: {output: ...}, step_2: {output: ...} }
+      }
+    });
+    ```
+  </Tab>
+
+  <Tab title="View Step Output">
+    Click on any executed step to see:
+    - Input values that were used
+    - Output data that was produced
+    - Execution time and status
+
+    ```typescript
+    // Step output structure
+    {
+      "status": "SUCCEEDED",
+      "output": {
+        // Actual step output data
+      },
+      "input": {
+        // Input values used
+      },
+      "duration": 1250  // milliseconds
+    }
+    ```
+  </Tab>
+
+  <Tab title="Debug Issues">
+    If data isn't flowing correctly:
+
+    1. Check step names are correct
+    2. Verify the step executed successfully
+    3. Inspect the actual output structure
+    4. Ensure property paths are correct
+
+    <Warning>
+    Common mistake: Using `{{ trigger.name }}` when the trigger output is `{{ trigger.body.name }}`
+    </Warning>
+  </Tab>
+</Tabs>
+
+## Sample Data
+
+Steps can save sample data for testing:
+
+```typescript
+// From packages/shared/src/lib/automation/flows/actions/action.ts
+export const SampleDataSetting = {
+  "sampleDataFileId": string,       // Saved sample output
+  "sampleDataInputFileId": string,  // Saved sample input
+  "lastTestDate": string,           // When last tested
+  "currentSelectedData": object     // Current test data
+}
+```
+
+<Note>
+Sample data is automatically saved when you test individual steps, making it easy to test downstream steps without re-running the entire flow.
+</Note>
+
+## Advanced Data Techniques
+
+### Working with JSON
+
+```typescript
+// Parse JSON string
+{{ JSON.parse(trigger.jsonString) }}
+
+// Stringify object
+{{ JSON.stringify(trigger.data) }}
+
+// Pretty print
+{{ JSON.stringify(trigger.data, null, 2) }}
+```
+
+### Date and Time
+
+```typescript
+// Current timestamp
+{{ Date.now() }}
+
+// Format date
+{{ new Date(trigger.timestamp).toISOString() }}
+
+// Date arithmetic
+{{ new Date(Date.now() + 86400000).toISOString() }}  // Tomorrow
+```
+
+### Error Handling in Expressions
+
+```typescript
+// Safe property access
+{{ trigger?.user?.profile?.email || 'no-email@example.com' }}
+
+// Try-catch in code actions
+export const code = async (inputs) => {
+  try {
+    return JSON.parse(inputs.data);
+  } catch (error) {
+    return { error: error.message };
+  }
+};
+```
+
+## Common Patterns
+
+<AccordionGroup>
+  <Accordion title="Extract Specific Fields">
+    Extract only the fields you need from a large object:
+
+    ```typescript
+    {
+      "name": "{{ trigger.user.name }}",
+      "email": "{{ trigger.user.email }}",
+      "created": "{{ new Date().toISOString() }}"
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Merge Multiple Sources">
+    Combine data from different steps:
+
+    ```typescript
+    {
+      "userData": "{{ get_user.output }}",
+      "orderData": "{{ get_orders.body }}",
+      "timestamp": "{{ Date.now() }}"
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Build Dynamic URLs">
+    Construct URLs from variables:
+
+    ```typescript
+    {{ `https://api.example.com/users/${trigger.userId}/orders?limit=10` }}
+    ```
+  </Accordion>
+
+  <Accordion title="Conditional Field Inclusion">
+    Include fields only if they exist:
+
+    ```typescript
+    {
+      "name": "{{ trigger.name }}",
+      ...{{ trigger.email ? { email: trigger.email } : {} }}
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+1. **Use Meaningful Step Names**: Rename steps to reflect what they do (e.g., `get_user` instead of `step_1`)
+2. **Test Data Flow**: Always test with real data to verify expressions work correctly
+3. **Handle Missing Data**: Use null coalescing (`??`) or defaults for optional fields
+4. **Keep Expressions Simple**: Complex logic should go in code actions
+5. **Document Complex Mappings**: Add notes explaining non-obvious data transformations
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Loops & Branches" icon="code-branch" href="/workflows/loops-branches">
+    Learn control flow and conditional logic
+  </Card>
+  <Card title="Code Actions" icon="code" href="/pieces/custom-pieces">
+    Write custom data transformations
+  </Card>
+  <Card title="Debugging" icon="bug" href="/workflows/debugging">
+    Debug data flow issues
+  </Card>
+  <Card title="Error Handling" icon="shield" href="/workflows/error-handling">
+    Handle data errors gracefully
+  </Card>
+</CardGroup>

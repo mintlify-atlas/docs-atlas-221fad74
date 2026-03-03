@@ -1,0 +1,451 @@
+---
+title: 'Single Sign-On (SSO)'
+description: 'Configure SAML and OAuth authentication for your platform'
+icon: 'fingerprint'
+---
+
+Activepieces supports enterprise Single Sign-On (SSO) authentication, allowing users to authenticate using your organization's identity provider.
+
+## Supported Providers
+
+<CardGroup cols={2}>
+  <Card title="SAML 2.0" icon="key">
+    Industry-standard protocol for enterprise SSO with Okta, Azure AD, Google Workspace, and more.
+  </Card>
+  <Card title="OAuth 2.0" icon="shield">
+    Modern authentication protocol for third-party identity providers.
+  </Card>
+</CardGroup>
+
+## SAML Configuration
+
+Activepieces implements SAML 2.0 authentication using the Service Provider (SP) initiated flow.
+
+### Prerequisites
+
+<Steps>
+  <Step title="Identity Provider Access">
+    Admin access to your IdP (Okta, Azure AD, Google Workspace, etc.)
+  </Step>
+  
+  <Step title="Required Information">
+    - IdP Metadata XML or URL
+    - IdP Certificate (for request signing)
+    - Attribute mappings
+  </Step>
+  
+  <Step title="Platform Configuration">
+    Platform-level SSO configuration in Activepieces
+  </Step>
+</Steps>
+
+### Setting Up SAML
+
+<Tabs>
+  <Tab title="IdP Configuration">
+    ### Configure Your Identity Provider
+    
+    #### 1. Create SAML Application
+    
+    In your IdP, create a new SAML 2.0 application with these settings:
+    
+    **Service Provider Details:**
+    ```
+    Entity ID: Activepieces
+    ACS URL: https://your-domain.com/api/v1/authn/saml/acs
+    Name ID Format: EmailAddress
+    ```
+    
+    #### 2. Configure Attribute Mappings
+    
+    <Warning>
+    These attributes are **required** and must be mapped exactly:
+    </Warning>
+    
+    | SAML Attribute | User Property | Required |
+    |----------------|---------------|----------|
+    | `email` | User email address | ✅ |
+    | `firstName` | User first name | ✅ |
+    | `lastName` | User last name | ✅ |
+    
+    **Example IdP Mappings:**
+    ```xml
+    <Attribute Name="email">
+      <AttributeValue>user.email</AttributeValue>
+    </Attribute>
+    <Attribute Name="firstName">
+      <AttributeValue>user.firstName</AttributeValue>
+    </Attribute>
+    <Attribute Name="lastName">
+      <AttributeValue>user.lastName</AttributeValue>
+    </Attribute>
+    ```
+    
+    #### 3. Download IdP Metadata
+    
+    Export the IdP metadata XML or copy the metadata URL.
+  </Tab>
+  
+  <Tab title="Activepieces Setup">
+    ### Configure Platform SSO
+    
+    #### 1. Enable SAML Authentication
+    
+    In your platform settings:
+    
+    ```typescript
+    {
+      federatedAuthProviders: {
+        saml: {
+          idpMetadata: "<EntityDescriptor>...</EntityDescriptor>",
+          idpCertificate: "-----BEGIN PRIVATE KEY-----\n..."
+        }
+      }
+    }
+    ```
+    
+    <Info>
+    The `idpCertificate` is used to sign authentication requests sent to your IdP.
+    </Info>
+    
+    #### 2. Generate Certificate
+    
+    Generate a private key for signing:
+    
+    ```bash
+    # Generate private key
+    openssl genrsa -out saml-private.key 2048
+    
+    # Extract private key content
+    cat saml-private.key
+    ```
+    
+    #### 3. Test Connection
+    
+    Access the SAML login endpoint:
+    ```
+    https://your-domain.com/api/v1/authn/saml/login
+    ```
+  </Tab>
+  
+  <Tab title="Provider Examples">
+    ### Provider-Specific Setup
+    
+    <AccordionGroup>
+      <Accordion title="Okta">
+        **Application Settings:**
+        - Single sign-on URL: `https://your-domain.com/api/v1/authn/saml/acs`
+        - Audience URI (SP Entity ID): `Activepieces`
+        - Name ID format: `EmailAddress`
+        
+        **Attribute Statements:**
+        | Name | Value |
+        |------|-------|
+        | email | user.email |
+        | firstName | user.firstName |
+        | lastName | user.lastName |
+      </Accordion>
+      
+      <Accordion title="Azure AD">
+        **Basic SAML Configuration:**
+        - Identifier (Entity ID): `Activepieces`
+        - Reply URL (ACS URL): `https://your-domain.com/api/v1/authn/saml/acs`
+        
+        **Attributes & Claims:**
+        | Claim name | Source attribute |
+        |------------|------------------|
+        | email | user.mail |
+        | firstName | user.givenname |
+        | lastName | user.surname |
+      </Accordion>
+      
+      <Accordion title="Google Workspace">
+        **Service Provider Details:**
+        - ACS URL: `https://your-domain.com/api/v1/authn/saml/acs`
+        - Entity ID: `Activepieces`
+        - Name ID: Basic Information > Primary Email
+        
+        **Attribute Mapping:**
+        | App attribute | Google Directory attribute |
+        |---------------|---------------------------|
+        | email | Primary Email |
+        | firstName | First Name |
+        | lastName | Last Name |
+      </Accordion>
+    </AccordionGroup>
+  </Tab>
+</Tabs>
+
+### SAML Authentication Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Browser
+    participant Activepieces
+    participant IdP
+    
+    User->>Browser: Access Activepieces
+    Browser->>Activepieces: GET /api/v1/authn/saml/login
+    Activepieces->>IdP: Redirect with SAML Request
+    IdP->>User: Show login page
+    User->>IdP: Enter credentials
+    IdP->>Activepieces: POST SAML Response to ACS
+    Activepieces->>Activepieces: Validate & extract attributes
+    Activepieces->>Browser: Redirect with auth token
+    Browser->>User: Logged in to Activepieces
+```
+
+### SAML Response Validation
+
+Activepieces validates SAML responses:
+
+<Steps>
+  <Step title="Signature Verification">
+    Verifies the SAML response is signed by the IdP
+  </Step>
+  
+  <Step title="Attribute Extraction">
+    Extracts email, firstName, lastName from assertion
+  </Step>
+  
+  <Step title="User Provisioning">
+    Creates or updates user account automatically
+  </Step>
+  
+  <Step title="Session Creation">
+    Issues JWT token for authenticated session
+  </Step>
+</Steps>
+
+## Security Configuration
+
+### SAML Security Settings
+
+Activepieces enforces these security features:
+
+```typescript
+{
+  isAssertionEncrypted: true,
+  wantMessageSigned: true,
+  wantLogoutResponseSigned: true,
+  wantLogoutRequestSigned: true,
+  messageSigningOrder: 'encrypt-then-sign'
+}
+```
+
+<Warning>
+All SAML messages must be signed to prevent tampering. Ensure your IdP is configured to sign assertions.
+</Warning>
+
+### Certificate Management
+
+<AccordionGroup>
+  <Accordion title="Private Key Security">
+    - Store private key securely (encrypted at rest)
+    - Never expose in logs or client-side code
+    - Rotate keys annually or after security incidents
+  </Accordion>
+  
+  <Accordion title="Certificate Rotation">
+    1. Generate new key pair
+    2. Update IdP with new certificate
+    3. Update Activepieces configuration
+    4. Test authentication
+    5. Revoke old certificate
+  </Accordion>
+  
+  <Accordion title="Key Requirements">
+    - Minimum 2048-bit RSA key
+    - PEM format
+    - No password protection (stored encrypted)
+  </Accordion>
+</AccordionGroup>
+
+## User Provisioning
+
+When users authenticate via SSO:
+
+### First-Time Login
+
+<Steps>
+  <Step title="User Creation">
+    New user account created with attributes from SAML:
+    ```typescript
+    {
+      email: "user@company.com",
+      firstName: "John",
+      lastName: "Doe",
+      status: UserStatus.ACTIVE,
+      identityId: "identity_xyz"
+    }
+    ```
+  </Step>
+  
+  <Step title="Invitation Processing">
+    If user has pending invitations, they're automatically provisioned:
+    - Added to invited projects
+    - Assigned specified roles
+    - Invitations marked as accepted
+  </Step>
+  
+  <Step title="Audit Event">
+    Login event recorded:
+    ```typescript
+    {
+      action: ApplicationEventName.USER_SIGNED_UP,
+      data: { source: 'sso' }
+    }
+    ```
+  </Step>
+</Steps>
+
+### Subsequent Logins
+
+- User profile updated with latest attributes
+- Login event recorded
+- Session token issued
+
+## OAuth Providers
+
+Activepieces also supports OAuth 2.0 for federated authentication:
+
+### Supported OAuth Providers
+
+<CardGroup cols={2}>
+  <Card title="Google" icon="google">
+    Google Workspace accounts
+  </Card>
+  <Card title="GitHub" icon="github">
+    GitHub organization members
+  </Card>
+  <Card title="Microsoft" icon="microsoft">
+    Azure AD / Microsoft 365
+  </Card>
+  <Card title="Custom" icon="key">
+    Any OAuth 2.0 provider
+  </Card>
+</CardGroup>
+
+### OAuth Configuration
+
+```typescript
+{
+  federatedAuthProviders: {
+    oauth: {
+      clientId: "your-client-id",
+      clientSecret: "your-client-secret",
+      authorizationUrl: "https://provider.com/oauth/authorize",
+      tokenUrl: "https://provider.com/oauth/token",
+      userInfoUrl: "https://provider.com/oauth/userinfo"
+    }
+  }
+}
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Invalid SAML Response Error">
+    **Cause:** Missing required attributes (email, firstName, lastName)
+    
+    **Solution:**
+    1. Check IdP attribute mappings
+    2. Verify attribute names match exactly
+    3. Test with SAML tracer browser extension
+  </Accordion>
+  
+  <Accordion title="Signature Verification Failed">
+    **Cause:** IdP certificate mismatch or unsigned responses
+    
+    **Solution:**
+    1. Ensure IdP is configured to sign assertions
+    2. Verify certificate in IdP metadata matches
+    3. Check certificate format (PEM)
+  </Accordion>
+  
+  <Accordion title="Redirect Loop">
+    **Cause:** ACS URL misconfiguration
+    
+    **Solution:**
+    1. Verify ACS URL in IdP matches exactly: `/api/v1/authn/saml/acs`
+    2. Check domain configuration
+    3. Ensure no trailing slashes
+  </Accordion>
+  
+  <Accordion title="Users Not Provisioned">
+    **Cause:** Platform ID not configured correctly
+    
+    **Solution:**
+    1. Verify platform ID in SAML configuration
+    2. Check custom domain settings
+    3. Review platform resolution logic
+  </Accordion>
+</AccordionGroup>
+
+## Testing SSO
+
+<Steps>
+  <Step title="Test Login Flow">
+    ```bash
+    # Access SAML login endpoint
+    curl -L https://your-domain.com/api/v1/authn/saml/login
+    ```
+  </Step>
+  
+  <Step title="Verify Attributes">
+    Check that user profile has correct information after login
+  </Step>
+  
+  <Step title="Test Invitations">
+    Invite a new SSO user and verify they're provisioned correctly
+  </Step>
+  
+  <Step title="Review Audit Logs">
+    Confirm authentication events are logged:
+    - USER_SIGNED_UP
+    - USER_SIGNED_IN
+  </Step>
+</Steps>
+
+## Production Checklist
+
+<CardGroup cols={2}>
+  <Card title="Metadata Validation" icon="check">
+    ✅ IdP metadata is valid XML
+    ✅ All required endpoints present
+    ✅ Certificate is valid and not expired
+  </Card>
+  
+  <Card title="Attribute Mapping" icon="check">
+    ✅ email, firstName, lastName mapped
+    ✅ Attribute names match exactly
+    ✅ Test with actual user accounts
+  </Card>
+  
+  <Card title="Security" icon="check">
+    ✅ Private key stored securely
+    ✅ Message signing enabled
+    ✅ Assertion encryption enabled
+  </Card>
+  
+  <Card title="Testing" icon="check">
+    ✅ Login flow works end-to-end
+    ✅ User provisioning succeeds
+    ✅ Audit events are logged
+  </Card>
+</CardGroup>
+
+## Related Topics
+
+<CardGroup cols={3}>
+  <Card title="Users & Permissions" icon="shield" href="/admin/users-permissions">
+    Configure user roles
+  </Card>
+  <Card title="Audit Logs" icon="list" href="/admin/audit-logs">
+    Track authentication events
+  </Card>
+  <Card title="Security Practices" icon="lock" href="/admin/security-practices">
+    General security guidelines
+  </Card>
+</CardGroup>

@@ -1,0 +1,532 @@
+---
+title: Authentication
+description: Configure authentication for your piece
+---
+
+## Authentication Overview
+
+Authentication in Activepieces pieces is handled by the `PieceAuth` module from `@activepieces/pieces-framework`. It provides type-safe authentication methods that integrate seamlessly with the platform.
+
+## Authentication Types
+
+Activepieces supports four authentication methods:
+
+<CardGroup cols={2}>
+  <Card title="OAuth2" icon="lock">
+    Industry-standard OAuth 2.0 protocol
+  </Card>
+  <Card title="Secret Text" icon="key">
+    API keys and tokens
+  </Card>
+  <Card title="Custom Auth" icon="sliders">
+    Multiple custom fields
+  </Card>
+  <Card title="Basic Auth" icon="user">
+    Username and password
+  </Card>
+</CardGroup>
+
+## OAuth2 Authentication
+
+OAuth2 is the most common authentication method for modern APIs. It allows users to grant access without sharing credentials.
+
+### Basic OAuth2 Setup
+
+```typescript
+import { PieceAuth } from '@activepieces/pieces-framework';
+
+export const slackAuth = PieceAuth.OAuth2({
+  displayName: 'Connection',
+  description: 'Connect your Slack workspace',
+  authUrl: 'https://slack.com/oauth/v2/authorize',
+  tokenUrl: 'https://slack.com/api/oauth.v2.access',
+  required: true,
+  scope: ['chat:write', 'channels:read', 'users:read'],
+});
+```
+
+### OAuth2 Configuration
+
+<ParamField path="authUrl" type="string" required>
+  The OAuth provider's authorization URL where users grant permissions
+</ParamField>
+
+<ParamField path="tokenUrl" type="string" required>
+  The endpoint to exchange authorization code for access token
+</ParamField>
+
+<ParamField path="scope" type="string[]" required>
+  Array of permission scopes to request from the OAuth provider
+</ParamField>
+
+<ParamField path="required" type="boolean" default="true">
+  Whether authentication is required for all actions/triggers
+</ParamField>
+
+<ParamField path="pkce" type="boolean">
+  Enable PKCE (Proof Key for Code Exchange) for enhanced security
+</ParamField>
+
+<ParamField path="authorizationMethod" type="OAuth2AuthorizationMethod">
+  How to send the access token:
+  - `HEADER` (default): In Authorization header
+  - `BODY`: In request body
+</ParamField>
+
+<ParamField path="grantType" type="OAuth2GrantType">
+  OAuth2 grant type:
+  - `AUTHORIZATION_CODE` (default)
+  - `CLIENT_CREDENTIALS`
+</ParamField>
+
+### OAuth2 with Additional Props
+
+Some OAuth providers require additional parameters during authentication:
+
+```typescript
+export const githubAuth = PieceAuth.OAuth2({
+  displayName: 'Connection',
+  authUrl: 'https://github.com/login/oauth/authorize',
+  tokenUrl: 'https://github.com/login/oauth/access_token',
+  required: true,
+  scope: ['repo', 'user'],
+  // Additional properties shown to users
+  props: {
+    baseUrl: Property.ShortText({
+      displayName: 'Base URL',
+      description: 'GitHub instance URL (for Enterprise)',
+      required: false,
+      defaultValue: 'https://api.github.com',
+    }),
+  },
+});
+```
+
+### Using OAuth2 in Actions
+
+```typescript
+import { createAction, Property } from '@activepieces/pieces-framework';
+import { slackAuth } from '../auth';
+
+export const sendMessage = createAction({
+  auth: slackAuth,
+  name: 'send_message',
+  displayName: 'Send Message',
+  description: 'Send a message to a Slack channel',
+  props: {
+    channel: Property.ShortText({
+      displayName: 'Channel',
+      required: true,
+    }),
+    text: Property.LongText({
+      displayName: 'Message',
+      required: true,
+    }),
+  },
+  async run(context) {
+    // Access token is available in context.auth
+    const token = context.auth.access_token;
+    
+    // Additional OAuth data
+    const teamId = context.auth.data.team_id;
+    
+    // Make API calls with the token
+    const response = await fetch('https://slack.com/api/chat.postMessage', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        channel: context.propsValue.channel,
+        text: context.propsValue.text,
+      }),
+    });
+    
+    return response.json();
+  },
+});
+```
+
+## Secret Text (API Key)
+
+The simplest authentication method for APIs that use API keys or tokens.
+
+### Basic Setup
+
+```typescript
+import { PieceAuth } from '@activepieces/pieces-framework';
+
+export const openaiAuth = PieceAuth.SecretText({
+  displayName: 'API Key',
+  description: 'Enter your OpenAI API key',
+  required: true,
+});
+```
+
+### With Validation
+
+```typescript
+export const apiKeyAuth = PieceAuth.SecretText({
+  displayName: 'API Key',
+  description: 'Your service API key',
+  required: true,
+  validate: async ({ auth }) => {
+    try {
+      // Test the API key
+      const response = await fetch('https://api.example.com/validate', {
+        headers: {
+          'Authorization': `Bearer ${auth}`,
+        },
+      });
+      
+      if (response.ok) {
+        return {
+          valid: true,
+        };
+      }
+      
+      return {
+        valid: false,
+        error: 'Invalid API key',
+      };
+    } catch (error) {
+      return {
+        valid: false,
+        error: 'Failed to validate API key',
+      };
+    }
+  },
+});
+```
+
+### Using Secret Text in Actions
+
+```typescript
+export const createCompletion = createAction({
+  auth: openaiAuth,
+  name: 'create_completion',
+  displayName: 'Create Completion',
+  props: {
+    prompt: Property.LongText({
+      displayName: 'Prompt',
+      required: true,
+    }),
+  },
+  async run(context) {
+    // Access API key directly from context.auth
+    const apiKey = context.auth;
+    
+    const response = await fetch('https://api.openai.com/v1/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-3.5-turbo',
+        prompt: context.propsValue.prompt,
+      }),
+    });
+    
+    return response.json();
+  },
+});
+```
+
+## Custom Authentication
+
+Custom auth allows you to define multiple fields for complex authentication requirements.
+
+### Basic Setup
+
+```typescript
+import { PieceAuth, Property } from '@activepieces/pieces-framework';
+
+export const customAuth = PieceAuth.CustomAuth({
+  displayName: 'Connection',
+  description: 'Enter your credentials',
+  props: {
+    apiKey: Property.ShortText({
+      displayName: 'API Key',
+      required: true,
+    }),
+    apiSecret: PieceAuth.SecretText({
+      displayName: 'API Secret',
+      required: true,
+    }),
+    environment: Property.StaticDropdown({
+      displayName: 'Environment',
+      required: true,
+      options: {
+        options: [
+          { label: 'Production', value: 'production' },
+          { label: 'Sandbox', value: 'sandbox' },
+        ],
+      },
+    }),
+  },
+  required: true,
+});
+```
+
+### Real-World Example: AWS Credentials
+
+```typescript
+export const awsAuth = PieceAuth.CustomAuth({
+  displayName: 'AWS Credentials',
+  description: 'Configure AWS credentials',
+  props: {
+    accessKeyId: Property.ShortText({
+      displayName: 'Access Key ID',
+      description: 'AWS Access Key ID',
+      required: true,
+    }),
+    secretAccessKey: PieceAuth.SecretText({
+      displayName: 'Secret Access Key',
+      description: 'AWS Secret Access Key',
+      required: true,
+    }),
+    region: Property.StaticDropdown({
+      displayName: 'Region',
+      description: 'AWS Region',
+      required: true,
+      options: {
+        options: [
+          { label: 'US East (N. Virginia)', value: 'us-east-1' },
+          { label: 'US West (Oregon)', value: 'us-west-2' },
+          { label: 'EU (Ireland)', value: 'eu-west-1' },
+          // ... more regions
+        ],
+      },
+    }),
+  },
+  required: true,
+});
+```
+
+### Using Custom Auth in Actions
+
+```typescript
+export const uploadToS3 = createAction({
+  auth: awsAuth,
+  name: 'upload_to_s3',
+  displayName: 'Upload to S3',
+  props: {
+    bucket: Property.ShortText({
+      displayName: 'Bucket',
+      required: true,
+    }),
+    file: Property.File({
+      displayName: 'File',
+      required: true,
+    }),
+  },
+  async run(context) {
+    // Access all auth fields
+    const { accessKeyId, secretAccessKey, region } = context.auth;
+    
+    // Use AWS SDK with credentials
+    const s3Client = new S3Client({
+      region: region,
+      credentials: {
+        accessKeyId: accessKeyId,
+        secretAccessKey: secretAccessKey,
+      },
+    });
+    
+    // Upload file
+    const command = new PutObjectCommand({
+      Bucket: context.propsValue.bucket,
+      Key: context.propsValue.file.filename,
+      Body: context.propsValue.file.data,
+    });
+    
+    return await s3Client.send(command);
+  },
+});
+```
+
+## Basic Authentication
+
+Traditional username and password authentication.
+
+```typescript
+export const basicAuth = PieceAuth.BasicAuth({
+  displayName: 'Credentials',
+  description: 'Enter your username and password',
+  required: true,
+});
+```
+
+### Using Basic Auth
+
+```typescript
+export const fetchData = createAction({
+  auth: basicAuth,
+  name: 'fetch_data',
+  displayName: 'Fetch Data',
+  props: {},
+  async run(context) {
+    // Access username and password
+    const { username, password } = context.auth;
+    
+    // Create Basic Auth header
+    const credentials = Buffer.from(`${username}:${password}`).toString('base64');
+    
+    const response = await fetch('https://api.example.com/data', {
+      headers: {
+        'Authorization': `Basic ${credentials}`,
+      },
+    });
+    
+    return response.json();
+  },
+});
+```
+
+## Auth Type Comparison
+
+<Tabs>
+  <Tab title="OAuth2">
+    **Best for:**
+    - Modern cloud services
+    - Services with user-level permissions
+    - When you need refresh tokens
+    
+    **Pros:**
+    - Most secure
+    - No credential sharing
+    - Granular permissions
+    - Token refresh support
+    
+    **Cons:**
+    - More complex setup
+    - Requires OAuth app registration
+    - Users must authorize
+  </Tab>
+
+  <Tab title="Secret Text">
+    **Best for:**
+    - Simple API key authentication
+    - Service-to-service communication
+    - Quick integrations
+    
+    **Pros:**
+    - Simplest to implement
+    - Easy for users to set up
+    - No OAuth flow needed
+    
+    **Cons:**
+    - Less secure if key is compromised
+    - No automatic refresh
+    - One key for all actions
+  </Tab>
+
+  <Tab title="Custom Auth">
+    **Best for:**
+    - Multiple credential fields
+    - Environment-specific configs
+    - Complex auth requirements
+    
+    **Pros:**
+    - Flexible field definition
+    - Support multiple values
+    - Custom validation
+    
+    **Cons:**
+    - More user input required
+    - More complex to implement
+  </Tab>
+
+  <Tab title="Basic Auth">
+    **Best for:**
+    - Legacy systems
+    - Simple HTTP authentication
+    - Internal services
+    
+    **Pros:**
+    - Widely supported
+    - Simple implementation
+    - Standard HTTP auth
+    
+    **Cons:**
+    - Less secure than OAuth2
+    - Credentials in every request
+    - No token refresh
+  </Tab>
+</Tabs>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Always Validate Credentials">
+    Implement validation logic to test credentials during setup:
+    
+    ```typescript
+    validate: async ({ auth }) => {
+      try {
+        // Test the credentials
+        const response = await testConnection(auth);
+        return { valid: true };
+      } catch (error) {
+        return {
+          valid: false,
+          error: 'Invalid credentials',
+        };
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Use Appropriate Scopes">
+    For OAuth2, request only the permissions you need:
+    
+    ```typescript
+    // Good: Minimal scopes
+    scope: ['read:user', 'write:repo']
+    
+    // Bad: Too broad
+    scope: ['admin', 'delete_everything']
+    ```
+  </Accordion>
+
+  <Accordion title="Handle Token Expiration">
+    Implement proper error handling for expired tokens:
+    
+    ```typescript
+    try {
+      const response = await makeApiCall(token);
+    } catch (error) {
+      if (error.status === 401) {
+        // Token expired, show helpful error
+        throw new Error('Token expired. Please reconnect.');
+      }
+      throw error;
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Provide Clear Descriptions">
+    Help users understand what credentials they need:
+    
+    ```typescript
+    PieceAuth.SecretText({
+      displayName: 'API Key',
+      description: 'Find your API key at https://example.com/settings/api',
+      required: true,
+    })
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Create Actions" href="/pieces/create-action" icon="play">
+    Use authentication in your actions
+  </Card>
+  <Card title="Properties Guide" href="/pieces/properties" icon="sliders">
+    Learn about property types for auth fields
+  </Card>
+</CardGroup>

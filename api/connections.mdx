@@ -1,0 +1,748 @@
+---
+title: 'Connections API'
+description: 'Manage app connections and OAuth integrations programmatically'
+icon: 'link'
+---
+
+## Overview
+
+The Connections API (also called App Connections) allows you to manage authentication credentials for third-party integrations. Connections store OAuth tokens, API keys, and other authentication data needed to interact with external services.
+
+## Base Endpoint
+
+```
+GET    /api/v1/app-connections
+POST   /api/v1/app-connections
+POST   /api/v1/app-connections/:id
+DELETE /api/v1/app-connections/:id
+GET    /api/v1/app-connections/owners
+POST   /api/v1/app-connections/replace
+```
+
+## List Connections
+
+Retrieve a paginated list of app connections.
+
+```bash
+curl https://cloud.activepieces.com/api/v1/app-connections?projectId=project_123 \
+  -H "Authorization: Bearer sk-your-api-key"
+```
+
+### Query Parameters
+
+<ParamField query="pieceName" type="string">
+  Filter by piece (integration) name, e.g., `@activepieces/piece-slack`
+</ParamField>
+
+<ParamField query="displayName" type="string">
+  Search connections by display name (partial match)
+</ParamField>
+
+<ParamField query="status" type="array">
+  Filter by connection status: `ACTIVE`, `MISSING`, `ERROR`
+</ParamField>
+
+<ParamField query="scope" type="enum">
+  Filter by scope: `PROJECT`, `PLATFORM`
+</ParamField>
+
+<ParamField query="limit" type="number" default="10">
+  Number of connections to return (1-100)
+</ParamField>
+
+<ParamField query="cursor" type="string">
+  Pagination cursor from previous response
+</ParamField>
+
+### Response
+
+<ResponseField name="data" type="array">
+  Array of app connection objects (without sensitive data)
+  
+  <Expandable title="Connection Object">
+    <ResponseField name="id" type="string">
+      Unique identifier for the connection
+    </ResponseField>
+    
+    <ResponseField name="externalId" type="string">
+      External identifier for the connection
+    </ResponseField>
+    
+    <ResponseField name="displayName" type="string">
+      Human-readable name for the connection
+    </ResponseField>
+    
+    <ResponseField name="type" type="enum">
+      Authentication type: `OAUTH2`, `PLATFORM_OAUTH2`, `CLOUD_OAUTH2`, `SECRET_TEXT`, `BASIC_AUTH`, `CUSTOM_AUTH`, `NO_AUTH`
+    </ResponseField>
+    
+    <ResponseField name="pieceName" type="string">
+      Name of the piece this connection is for
+    </ResponseField>
+    
+    <ResponseField name="pieceVersion" type="string">
+      Version of the piece
+    </ResponseField>
+    
+    <ResponseField name="projectIds" type="array">
+      Project IDs where this connection is available
+    </ResponseField>
+    
+    <ResponseField name="platformId" type="string">
+      Platform ID owning this connection
+    </ResponseField>
+    
+    <ResponseField name="scope" type="enum">
+      Connection scope: `PROJECT` or `PLATFORM`
+    </ResponseField>
+    
+    <ResponseField name="status" type="enum">
+      Connection health status: `ACTIVE`, `MISSING`, `ERROR`
+    </ResponseField>
+    
+    <ResponseField name="ownerId" type="string">
+      User ID of the connection owner
+    </ResponseField>
+    
+    <ResponseField name="owner" type="object">
+      Owner user information
+      
+      <ResponseField name="email" type="string">
+        Owner's email
+      </ResponseField>
+      
+      <ResponseField name="firstName" type="string">
+        Owner's first name
+      </ResponseField>
+      
+      <ResponseField name="lastName" type="string">
+        Owner's last name
+      </ResponseField>
+    </ResponseField>
+    
+    <ResponseField name="metadata" type="object">
+      Custom metadata
+    </ResponseField>
+    
+    <ResponseField name="flowIds" type="array">
+      IDs of flows using this connection
+    </ResponseField>
+    
+    <ResponseField name="preSelectForNewProjects" type="boolean">
+      Whether this connection is pre-selected for new projects
+    </ResponseField>
+    
+    <ResponseField name="created" type="string">
+      ISO 8601 timestamp of creation
+    </ResponseField>
+    
+    <ResponseField name="updated" type="string">
+      ISO 8601 timestamp of last update
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+```json Response Example
+{
+  "data": [
+    {
+      "id": "conn_abc123",
+      "externalId": "ext_slack_main",
+      "displayName": "Company Slack",
+      "type": "OAUTH2",
+      "pieceName": "@activepieces/piece-slack",
+      "pieceVersion": "0.10.0",
+      "projectIds": ["project_123"],
+      "platformId": "platform_456",
+      "scope": "PROJECT",
+      "status": "ACTIVE",
+      "ownerId": "user_789",
+      "owner": {
+        "email": "user@company.com",
+        "firstName": "John",
+        "lastName": "Doe"
+      },
+      "metadata": null,
+      "flowIds": ["flow_xyz"],
+      "preSelectForNewProjects": false,
+      "created": "2024-01-10T10:00:00.000Z",
+      "updated": "2024-01-15T14:30:00.000Z"
+    }
+  ],
+  "next": null,
+  "previous": null
+}
+```
+
+## Create/Update Connection (Upsert)
+
+Create a new connection or update an existing one based on `externalId`.
+
+```bash
+curl -X POST https://cloud.activepieces.com/api/v1/app-connections \
+  -H "Authorization: Bearer sk-your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "displayName": "My Slack Workspace",
+    "pieceName": "@activepieces/piece-slack",
+    "pieceVersion": "0.10.0",
+    "type": "SECRET_TEXT",
+    "externalId": "ext_slack_main",
+    "value": {
+      "type": "SECRET_TEXT",
+      "secret_text": "xoxb-your-slack-token"
+    }
+  }'
+```
+
+### Request Body
+
+<ParamField body="displayName" type="string" required>
+  Human-readable name for the connection
+</ParamField>
+
+<ParamField body="pieceName" type="string" required>
+  Name of the piece (integration), e.g., `@activepieces/piece-slack`
+</ParamField>
+
+<ParamField body="pieceVersion" type="string" required>
+  Version of the piece
+</ParamField>
+
+<ParamField body="type" type="enum" required>
+  Authentication type: `OAUTH2`, `SECRET_TEXT`, `BASIC_AUTH`, `CUSTOM_AUTH`, `NO_AUTH`
+</ParamField>
+
+<ParamField body="externalId" type="string">
+  External identifier. If a connection with this externalId exists, it will be updated instead of creating a new one
+</ParamField>
+
+<ParamField body="value" type="object" required>
+  Authentication credentials (format depends on `type`)
+</ParamField>
+
+<ParamField body="metadata" type="object">
+  Custom metadata to store with the connection
+</ParamField>
+
+### Connection Value Formats
+
+<Tabs>
+  <Tab title="SECRET_TEXT">
+    For API keys, tokens, and other secret strings.
+    
+    ```json
+    {
+      "type": "SECRET_TEXT",
+      "value": {
+        "type": "SECRET_TEXT",
+        "secret_text": "your-api-key-here"
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="BASIC_AUTH">
+    For username/password authentication.
+    
+    ```json
+    {
+      "type": "BASIC_AUTH",
+      "value": {
+        "type": "BASIC_AUTH",
+        "username": "user@example.com",
+        "password": "secure-password"
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="OAUTH2">
+    For OAuth2 with your own app credentials.
+    
+    ```json
+    {
+      "type": "OAUTH2",
+      "value": {
+        "type": "OAUTH2",
+        "client_id": "your-client-id",
+        "client_secret": "your-client-secret",
+        "access_token": "access-token",
+        "refresh_token": "refresh-token",
+        "token_type": "Bearer",
+        "expires_in": 3600,
+        "claimed_at": 1640000000000,
+        "scope": "read write",
+        "token_url": "https://oauth.example.com/token",
+        "redirect_url": "https://your-app.com/oauth/callback",
+        "authorization_method": "BODY",
+        "grant_type": "AUTHORIZATION_CODE",
+        "data": {}
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="CUSTOM_AUTH">
+    For custom authentication with arbitrary key-value pairs.
+    
+    ```json
+    {
+      "type": "CUSTOM_AUTH",
+      "value": {
+        "type": "CUSTOM_AUTH",
+        "props": {
+          "api_key": "key123",
+          "domain": "mycompany.example.com",
+          "region": "us-west-2"
+        }
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="NO_AUTH">
+    For integrations that don't require authentication.
+    
+    ```json
+    {
+      "type": "NO_AUTH",
+      "value": {
+        "type": "NO_AUTH"
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Response
+
+Returns the created/updated connection object (without sensitive values). Status code 201 for creation.
+
+<Warning>
+**Security Note:**
+
+- Sensitive values (tokens, passwords) are encrypted before storage
+- List and get endpoints never return sensitive credential data
+- Only the connection owner can update credentials
+</Warning>
+
+## Update Connection Metadata
+
+Update the display name and metadata of a connection without changing credentials.
+
+```bash
+curl -X POST https://cloud.activepieces.com/api/v1/app-connections/conn_abc123 \
+  -H "Authorization: Bearer sk-your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "displayName": "Updated Slack Connection",
+    "metadata": {
+      "environment": "production",
+      "team": "marketing"
+    }
+  }'
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The connection ID
+</ParamField>
+
+### Request Body
+
+<ParamField body="displayName" type="string">
+  New display name
+</ParamField>
+
+<ParamField body="metadata" type="object">
+  Updated metadata
+</ParamField>
+
+### Response
+
+Returns the updated connection object.
+
+## Delete Connection
+
+Permanently delete a connection.
+
+```bash
+curl -X DELETE https://cloud.activepieces.com/api/v1/app-connections/conn_abc123 \
+  -H "Authorization: Bearer sk-your-api-key"
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The connection ID to delete
+</ParamField>
+
+### Response
+
+Returns `204 No Content` on successful deletion.
+
+<Warning>
+Deleting a connection that is being used in active flows will cause those flows to fail. Check `flowIds` before deletion.
+</Warning>
+
+## List Connection Owners
+
+Get a list of users who own connections in the project.
+
+```bash
+curl https://cloud.activepieces.com/api/v1/app-connections/owners \
+  -H "Authorization: Bearer sk-your-api-key"
+```
+
+### Response
+
+```json
+{
+  "data": [
+    {
+      "firstName": "John",
+      "lastName": "Doe",
+      "email": "john.doe@example.com"
+    },
+    {
+      "firstName": "Jane",
+      "lastName": "Smith",
+      "email": "jane.smith@example.com"
+    }
+  ],
+  "next": null,
+  "previous": null
+}
+```
+
+## Replace Connection
+
+Replace one connection with another across all flows in the project.
+
+```bash
+curl -X POST https://cloud.activepieces.com/api/v1/app-connections/replace \
+  -H "Authorization: Bearer sk-your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sourceAppConnectionId": "conn_old123",
+    "targetAppConnectionId": "conn_new456"
+  }'
+```
+
+### Request Body
+
+<ParamField body="sourceAppConnectionId" type="string" required>
+  ID of the connection to replace
+</ParamField>
+
+<ParamField body="targetAppConnectionId" type="string" required>
+  ID of the replacement connection
+</ParamField>
+
+### Response
+
+Returns `204 No Content` on success.
+
+<Tip>
+**Use Cases for Replace:**
+
+- Rotating credentials across all flows
+- Migrating to a different account
+- Consolidating duplicate connections
+</Tip>
+
+## Connection Types
+
+### OAuth2 Types
+
+<AccordionGroup>
+  <Accordion title="OAUTH2 - Self-Managed OAuth">
+    You provide your own OAuth2 app credentials (client ID/secret). Full control over the OAuth flow and refresh logic.
+    
+    **Best for:** Custom integrations, white-labeled solutions
+  </Accordion>
+  
+  <Accordion title="PLATFORM_OAUTH2 - Platform OAuth">
+    Uses platform-level OAuth credentials configured by the platform admin. Users just authorize, credentials are managed centrally.
+    
+    **Best for:** Multi-tenant platforms, managed SaaS
+  </Accordion>
+  
+  <Accordion title="CLOUD_OAUTH2 - Activepieces Cloud OAuth">
+    Uses Activepieces' OAuth credentials (Cloud edition only). Simplest setup, no OAuth app registration needed.
+    
+    **Best for:** Quick setup, testing, small deployments
+  </Accordion>
+</AccordionGroup>
+
+### Other Types
+
+- **SECRET_TEXT** - API keys, bearer tokens, webhook secrets
+- **BASIC_AUTH** - Username/password combinations
+- **CUSTOM_AUTH** - Flexible key-value pairs for custom auth schemes
+- **NO_AUTH** - For public APIs or internal services
+
+## Connection Status
+
+| Status | Description |
+|--------|-------------|
+| `ACTIVE` | Connection is valid and working |
+| `MISSING` | Connection has been deleted but is still referenced |
+| `ERROR` | Connection has authentication errors (e.g., expired OAuth token) |
+
+<Note>
+Activepieces automatically monitors OAuth2 connections and attempts to refresh expired tokens. If refresh fails, the status changes to `ERROR`.
+</Note>
+
+## Connection Scope
+
+### Project-Scoped Connections
+
+```json
+{
+  "scope": "PROJECT",
+  "projectIds": ["project_123"]
+}
+```
+
+- Available only in specified projects
+- Managed by project members
+- Most common for team-specific integrations
+
+### Platform-Scoped Connections (Global)
+
+```json
+{
+  "scope": "PLATFORM",
+  "projectIds": ["project_123", "project_456", "project_789"],
+  "preSelectForNewProjects": true
+}
+```
+
+- Managed by platform admins
+- Can be shared across multiple projects
+- Useful for company-wide integrations
+- Can be pre-selected for new projects
+
+## OAuth2 Flow
+
+For OAuth2 connections, the typical flow is:
+
+1. **Initiate OAuth**: Redirect user to provider's authorization URL
+2. **User Authorizes**: User grants permissions
+3. **Receive Callback**: OAuth provider redirects to your callback URL with authorization code
+4. **Exchange Code**: Exchange authorization code for access token
+5. **Store Connection**: Create connection via API with tokens
+
+```typescript Example OAuth2 Handler
+// After receiving OAuth callback
+const tokenResponse = await fetch('https://oauth.provider.com/token', {
+  method: 'POST',
+  body: new URLSearchParams({
+    grant_type: 'authorization_code',
+    code: authorizationCode,
+    client_id: clientId,
+    client_secret: clientSecret,
+    redirect_uri: redirectUri
+  })
+});
+
+const tokens = await tokenResponse.json();
+
+// Create connection in Activepieces
+await fetch('https://cloud.activepieces.com/api/v1/app-connections', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${apiKey}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    displayName: 'My OAuth App',
+    pieceName: '@activepieces/piece-example',
+    pieceVersion: '1.0.0',
+    type: 'OAUTH2',
+    value: {
+      type: 'OAUTH2',
+      client_id: clientId,
+      client_secret: clientSecret,
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token,
+      token_type: 'Bearer',
+      expires_in: tokens.expires_in,
+      claimed_at: Date.now(),
+      scope: tokens.scope,
+      token_url: 'https://oauth.provider.com/token',
+      redirect_url: redirectUri,
+      grant_type: 'AUTHORIZATION_CODE',
+      data: {}
+    }
+  })
+});
+```
+
+## Error Responses
+
+### Connection Not Found (404)
+
+```json
+{
+  "statusCode": 404,
+  "code": "ENTITY_NOT_FOUND",
+  "params": {
+    "entityType": "app_connection",
+    "entityId": "conn_abc123",
+    "message": "Connection not found"
+  }
+}
+```
+
+### Connection In Use (400)
+
+```json
+{
+  "statusCode": 400,
+  "code": "VALIDATION",
+  "params": {
+    "message": "Connection is used in 3 active flows. Please remove it from flows first."
+  }
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Credential Management">
+    - Use `externalId` for idempotent upserts
+    - Rotate credentials regularly using replace endpoint
+    - Store metadata about credential source and expiration
+    - Monitor connection status and handle ERROR states
+  </Accordion>
+  
+  <Accordion title="OAuth2 Tokens">
+    - Store refresh tokens securely
+    - Activepieces handles token refresh automatically
+    - Set appropriate OAuth scopes (least privilege)
+    - Monitor `expires_in` and `claimed_at` for token health
+  </Accordion>
+  
+  <Accordion title="Multi-tenancy">
+    - Use PROJECT scope for tenant-specific connections
+    - Use PLATFORM scope for shared company integrations
+    - Leverage `preSelectForNewProjects` for default connections
+    - Use metadata to track tenant ownership
+  </Accordion>
+  
+  <Accordion title="Security">
+    - Never log or expose connection values
+    - Use HTTPS for all API calls
+    - Implement proper access controls
+    - Audit connection creation and deletion
+  </Accordion>
+</AccordionGroup>
+
+## Code Examples
+
+<CodeGroup>
+```typescript Node.js
+import axios from 'axios';
+
+const client = axios.create({
+  baseURL: 'https://cloud.activepieces.com/api/v1',
+  headers: {
+    'Authorization': `Bearer ${process.env.ACTIVEPIECES_API_KEY}`
+  }
+});
+
+// Create a Secret Text connection
+const connection = await client.post('/app-connections', {
+  displayName: 'Slack Bot Token',
+  pieceName: '@activepieces/piece-slack',
+  pieceVersion: '0.10.0',
+  type: 'SECRET_TEXT',
+  externalId: 'ext_slack_bot',
+  value: {
+    type: 'SECRET_TEXT',
+    secret_text: process.env.SLACK_BOT_TOKEN
+  },
+  metadata: {
+    environment: 'production',
+    workspace: 'company'
+  }
+});
+
+console.log('Created connection:', connection.data.id);
+
+// List all Slack connections
+const { data } = await client.get('/app-connections', {
+  params: {
+    pieceName: '@activepieces/piece-slack',
+    status: ['ACTIVE']
+  }
+});
+
+console.log(`Found ${data.data.length} active Slack connections`);
+```
+
+```python Python
+import requests
+import os
+
+API_KEY = os.environ['ACTIVEPIECES_API_KEY']
+BASE_URL = 'https://cloud.activepieces.com/api/v1'
+
+headers = {
+    'Authorization': f'Bearer {API_KEY}',
+    'Content-Type': 'application/json'
+}
+
+# Create a Secret Text connection
+response = requests.post(
+    f'{BASE_URL}/app-connections',
+    headers=headers,
+    json={
+        'displayName': 'Slack Bot Token',
+        'pieceName': '@activepieces/piece-slack',
+        'pieceVersion': '0.10.0',
+        'type': 'SECRET_TEXT',
+        'externalId': 'ext_slack_bot',
+        'value': {
+            'type': 'SECRET_TEXT',
+            'secret_text': os.environ['SLACK_BOT_TOKEN']
+        },
+        'metadata': {
+            'environment': 'production',
+            'workspace': 'company'
+        }
+    }
+)
+
+connection = response.json()
+print(f"Created connection: {connection['id']}")
+
+# List all Slack connections
+response = requests.get(
+    f'{BASE_URL}/app-connections',
+    headers=headers,
+    params={
+        'pieceName': '@activepieces/piece-slack',
+        'status': ['ACTIVE']
+    }
+)
+
+data = response.json()
+print(f"Found {len(data['data'])} active Slack connections")
+```
+</CodeGroup>
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Flows API" icon="diagram-project" href="/api/flows">
+    Flows that use these connections
+  </Card>
+  <Card title="Projects API" icon="folder" href="/api/projects">
+    Manage connection scope and project access
+  </Card>
+</CardGroup>

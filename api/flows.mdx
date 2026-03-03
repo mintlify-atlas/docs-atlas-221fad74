@@ -1,0 +1,608 @@
+---
+title: 'Flows API'
+description: 'Create, manage, and control automation flows programmatically'
+icon: 'diagram-project'
+---
+
+## Overview
+
+The Flows API allows you to create, update, retrieve, and delete automation flows. Flows are the core building blocks of Activepieces automations, containing triggers and actions that define your workflow logic.
+
+## Base Endpoint
+
+```
+POST   /api/v1/flows
+GET    /api/v1/flows
+GET    /api/v1/flows/:id
+POST   /api/v1/flows/:id
+DELET  /api/v1/flows/:id
+```
+
+## Create Flow
+
+Create a new flow in your project.
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://cloud.activepieces.com/api/v1/flows \
+  -H "Authorization: Bearer sk-your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "displayName": "My New Flow",
+    "projectId": "project_123",
+    "folderName": "Marketing Automations"
+  }'
+```
+
+```typescript TypeScript
+const response = await fetch('https://cloud.activepieces.com/api/v1/flows', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${apiKey}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    displayName: 'My New Flow',
+    projectId: 'project_123',
+    folderName: 'Marketing Automations'
+  })
+});
+
+const flow = await response.json();
+```
+</CodeGroup>
+
+### Request Body
+
+<ParamField body="displayName" type="string" required>
+  Name of the flow that will be displayed in the UI
+</ParamField>
+
+<ParamField body="projectId" type="string" required>
+  ID of the project where the flow will be created
+</ParamField>
+
+<ParamField body="folderId" type="string">
+  ID of the folder to place the flow in. If provided, `folderName` is ignored
+</ParamField>
+
+<ParamField body="folderName" type="string">
+  Name of the folder to create or use. Only used if `folderId` is not provided
+</ParamField>
+
+<ParamField body="templateId" type="string">
+  ID of a template to use as a starting point for the flow
+</ParamField>
+
+<ParamField body="metadata" type="object">
+  Custom metadata to attach to the flow. Useful for storing additional information
+</ParamField>
+
+### Response
+
+<ResponseField name="id" type="string">
+  Unique identifier for the flow
+</ResponseField>
+
+<ResponseField name="projectId" type="string">
+  ID of the project containing the flow
+</ResponseField>
+
+<ResponseField name="externalId" type="string">
+  External identifier for the flow (used for git sync)
+</ResponseField>
+
+<ResponseField name="ownerId" type="string">
+  ID of the user who created the flow
+</ResponseField>
+
+<ResponseField name="folderId" type="string">
+  ID of the folder containing the flow
+</ResponseField>
+
+<ResponseField name="status" type="enum">
+  Current status of the flow: `ENABLED` or `DISABLED`
+</ResponseField>
+
+<ResponseField name="publishedVersionId" type="string">
+  ID of the currently published version of the flow
+</ResponseField>
+
+<ResponseField name="version" type="object">
+  The flow version object containing triggers and actions
+  
+  <Expandable title="version properties">
+    <ResponseField name="id" type="string">
+      Version identifier
+    </ResponseField>
+    
+    <ResponseField name="displayName" type="string">
+      Display name of the flow
+    </ResponseField>
+    
+    <ResponseField name="trigger" type="object">
+      The trigger configuration that starts the flow
+    </ResponseField>
+    
+    <ResponseField name="valid" type="boolean">
+      Whether the flow version is valid and can be published
+    </ResponseField>
+    
+    <ResponseField name="schemaVersion" type="string">
+      Schema version for the flow structure
+    </ResponseField>
+    
+    <ResponseField name="updated" type="string">
+      Timestamp of last update
+    </ResponseField>
+    
+    <ResponseField name="updatedBy" type="string">
+      User ID who last updated this version
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="created" type="string">
+  ISO 8601 timestamp of when the flow was created
+</ResponseField>
+
+<ResponseField name="updated" type="string">
+  ISO 8601 timestamp of when the flow was last updated
+</ResponseField>
+
+```json Response Example
+{
+  "id": "flow_abc123",
+  "projectId": "project_123",
+  "externalId": "ext_flow_456",
+  "ownerId": "user_789",
+  "folderId": "folder_101",
+  "status": "DISABLED",
+  "publishedVersionId": null,
+  "metadata": null,
+  "operationStatus": "NONE",
+  "timeSavedPerRun": null,
+  "templateId": null,
+  "version": {
+    "id": "version_xyz",
+    "displayName": "My New Flow",
+    "trigger": {
+      "type": "EMPTY",
+      "settings": {}
+    },
+    "valid": false,
+    "schemaVersion": "1.0.0",
+    "created": "2024-01-15T10:00:00.000Z",
+    "updated": "2024-01-15T10:00:00.000Z"
+  },
+  "created": "2024-01-15T10:00:00.000Z",
+  "updated": "2024-01-15T10:00:00.000Z"
+}
+```
+
+## List Flows
+
+Retrieve a paginated list of flows in a project.
+
+```bash
+curl https://cloud.activepieces.com/api/v1/flows?projectId=project_123&limit=20 \
+  -H "Authorization: Bearer sk-your-api-key"
+```
+
+### Query Parameters
+
+<ParamField query="projectId" type="string" required>
+  Filter flows by project ID
+</ParamField>
+
+<ParamField query="folderId" type="string">
+  Filter flows by folder ID
+</ParamField>
+
+<ParamField query="status" type="array">
+  Filter by flow status: `ENABLED`, `DISABLED`
+</ParamField>
+
+<ParamField query="name" type="string">
+  Search flows by name (partial match)
+</ParamField>
+
+<ParamField query="versionState" type="enum">
+  Filter by version state: `DRAFT`, `LOCKED`
+</ParamField>
+
+<ParamField query="externalIds" type="array">
+  Filter flows by external IDs (for git sync)
+</ParamField>
+
+<ParamField query="connectionExternalIds" type="array">
+  Filter flows that use specific connections
+</ParamField>
+
+<ParamField query="agentExternalIds" type="array">
+  Filter flows that use specific agents
+</ParamField>
+
+<ParamField query="limit" type="number" default="10">
+  Number of flows to return (1-100)
+</ParamField>
+
+<ParamField query="cursor" type="string">
+  Pagination cursor from previous response
+</ParamField>
+
+### Response
+
+```json
+{
+  "data": [
+    {
+      "id": "flow_abc123",
+      "projectId": "project_123",
+      "externalId": "ext_flow_456",
+      "status": "ENABLED",
+      "version": {
+        "displayName": "Customer Onboarding",
+        "valid": true
+      },
+      "created": "2024-01-10T10:00:00.000Z",
+      "updated": "2024-01-15T14:30:00.000Z"
+    },
+    {
+      "id": "flow_def789",
+      "projectId": "project_123",
+      "externalId": "ext_flow_789",
+      "status": "DISABLED",
+      "version": {
+        "displayName": "Weekly Report",
+        "valid": true
+      },
+      "created": "2024-01-12T09:00:00.000Z",
+      "updated": "2024-01-14T16:00:00.000Z"
+    }
+  ],
+  "next": "eyJpZCI6ImZsb3dfZGVmNzg5In0=",
+  "previous": null
+}
+```
+
+## Get Flow
+
+Retrieve a specific flow by ID.
+
+```bash
+curl https://cloud.activepieces.com/api/v1/flows/flow_abc123 \
+  -H "Authorization: Bearer sk-your-api-key"
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The flow ID
+</ParamField>
+
+### Query Parameters
+
+<ParamField query="versionId" type="string">
+  Optional version ID to retrieve a specific version instead of the latest
+</ParamField>
+
+### Response
+
+Returns the full flow object with the populated version.
+
+## Update Flow (Operations)
+
+Apply operations to modify a flow. This endpoint handles various operations like changing status, importing flow definitions, and more.
+
+```bash
+curl -X POST https://cloud.activepieces.com/api/v1/flows/flow_abc123 \
+  -H "Authorization: Bearer sk-your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "CHANGE_STATUS",
+    "request": {
+      "status": "ENABLED"
+    }
+  }'
+```
+
+### Flow Operations
+
+<Tabs>
+  <Tab title="Change Status">
+    Enable or disable a flow.
+    
+    ```json
+    {
+      "type": "CHANGE_STATUS",
+      "request": {
+        "status": "ENABLED"
+      }
+    }
+    ```
+    
+    <ParamField body="request.status" type="enum" required>
+      New status: `ENABLED` or `DISABLED`
+    </ParamField>
+  </Tab>
+  
+  <Tab title="Import Flow">
+    Import a flow definition (e.g., from template or export).
+    
+    ```json
+    {
+      "type": "IMPORT_FLOW",
+      "request": {
+        "displayName": "Imported Flow",
+        "trigger": { /* trigger config */ },
+        "schemaVersion": "1.0.0",
+        "notes": []
+      }
+    }
+    ```
+    
+    <Note>
+    Sample data is automatically cleared during import for security.
+    </Note>
+  </Tab>
+  
+  <Tab title="Lock and Publish">
+    Lock the current version and publish it.
+    
+    ```json
+    {
+      "type": "LOCK_AND_PUBLISH",
+      "request": {}
+    }
+    ```
+    
+    This operation:
+    - Locks the current draft version
+    - Sets it as the published version
+    - Enables the flow if it was disabled
+  </Tab>
+</Tabs>
+
+<Warning>
+The flow cannot be modified if it was updated by another user within the last minute. This prevents concurrent editing conflicts.
+</Warning>
+
+## Count Flows
+
+Get the count of flows in a folder or project.
+
+```bash
+curl https://cloud.activepieces.com/api/v1/flows/count?projectId=project_123&folderId=folder_101 \
+  -H "Authorization: Bearer sk-your-api-key"
+```
+
+### Query Parameters
+
+<ParamField query="projectId" type="string" required>
+  Project ID
+</ParamField>
+
+<ParamField query="folderId" type="string">
+  Optional folder ID to count flows in a specific folder
+</ParamField>
+
+### Response
+
+```json
+{
+  "count": 15
+}
+```
+
+## Export Flow as Template
+
+Export a flow as a reusable template.
+
+```bash
+curl https://cloud.activepieces.com/api/v1/flows/flow_abc123/template \
+  -H "Authorization: Bearer sk-your-api-key"
+```
+
+### Response
+
+Returns a `SharedTemplate` object that can be imported into other flows or shared.
+
+```json
+{
+  "name": "Customer Onboarding Template",
+  "description": "Automated customer onboarding workflow",
+  "template": {
+    "displayName": "Customer Onboarding",
+    "trigger": { /* trigger config */ },
+    "schemaVersion": "1.0.0"
+  },
+  "created": "2024-01-15T10:00:00.000Z"
+}
+```
+
+## Delete Flow
+
+Permanently delete a flow.
+
+```bash
+curl -X DELETE https://cloud.activepieces.com/api/v1/flows/flow_abc123 \
+  -H "Authorization: Bearer sk-your-api-key"
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The flow ID to delete
+</ParamField>
+
+### Response
+
+Returns `204 No Content` on successful deletion.
+
+<Warning>
+Deleting a flow is permanent and cannot be undone. All flow runs and history will be preserved, but the flow definition will be deleted.
+</Warning>
+
+## Flow Status Management
+
+### Enabling Flows
+
+When enabling a flow:
+- The flow must have a valid trigger configured
+- Platform active flow limits are checked
+- Webhooks are registered if using webhook triggers
+- Scheduled triggers are set up if using schedule triggers
+
+### Disabling Flows
+
+When disabling a flow:
+- Active runs continue to completion
+- New runs are prevented
+- Webhooks are unregistered
+- Scheduled triggers are paused
+
+## Active Flows Limit
+
+<Info>
+Your platform has a limit on the number of active (enabled) flows based on your plan. Attempting to enable a flow when at the limit will return an error.
+</Info>
+
+## Error Responses
+
+### Flow In Use (409)
+
+```json
+{
+  "statusCode": 409,
+  "code": "FLOW_IN_USE",
+  "params": {
+    "flowVersionId": "version_xyz",
+    "message": "Flow is being used by another user in the last minute. Please try again later."
+  }
+}
+```
+
+### Flow Not Found (404)
+
+```json
+{
+  "statusCode": 404,
+  "code": "ENTITY_NOT_FOUND",
+  "params": {
+    "entityType": "flow",
+    "entityId": "flow_abc123",
+    "message": "Flow not found"
+  }
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Folder Organization">
+    - Use folders to organize flows by team, department, or use case
+    - Create folders with descriptive names
+    - Leverage `folderName` parameter for automatic folder creation
+  </Accordion>
+  
+  <Accordion title="Metadata Usage">
+    - Store custom tags, categories, or identifiers in metadata
+    - Use metadata for integration with external systems
+    - Keep metadata size reasonable (< 1KB recommended)
+  </Accordion>
+  
+  <Accordion title="Version Control">
+    - Use `externalId` for git synchronization
+    - Export flows as templates for backup
+    - Test flows in disabled state before enabling
+  </Accordion>
+  
+  <Accordion title="Performance">
+    - Use pagination cursors for large flow lists
+    - Filter by folder or status to reduce response size
+    - Cache flow definitions when possible
+  </Accordion>
+</AccordionGroup>
+
+## Code Examples
+
+<CodeGroup>
+```typescript Node.js
+import axios from 'axios';
+
+const client = axios.create({
+  baseURL: 'https://cloud.activepieces.com/api/v1',
+  headers: {
+    'Authorization': `Bearer ${process.env.ACTIVEPIECES_API_KEY}`
+  }
+});
+
+// Create a flow
+const newFlow = await client.post('/flows', {
+  displayName: 'Slack Notification',
+  projectId: 'project_123',
+  folderName: 'Notifications'
+});
+
+console.log('Created flow:', newFlow.data.id);
+
+// Enable the flow
+await client.post(`/flows/${newFlow.data.id}`, {
+  type: 'CHANGE_STATUS',
+  request: { status: 'ENABLED' }
+});
+
+console.log('Flow enabled!');
+```
+
+```python Python
+import requests
+import os
+
+API_KEY = os.environ['ACTIVEPIECES_API_KEY']
+BASE_URL = 'https://cloud.activepieces.com/api/v1'
+
+headers = {
+    'Authorization': f'Bearer {API_KEY}',
+    'Content-Type': 'application/json'
+}
+
+# Create a flow
+response = requests.post(
+    f'{BASE_URL}/flows',
+    headers=headers,
+    json={
+        'displayName': 'Slack Notification',
+        'projectId': 'project_123',
+        'folderName': 'Notifications'
+    }
+)
+
+flow = response.json()
+print(f"Created flow: {flow['id']}")
+
+# Enable the flow
+requests.post(
+    f"{BASE_URL}/flows/{flow['id']}",
+    headers=headers,
+    json={
+        'type': 'CHANGE_STATUS',
+        'request': {'status': 'ENABLED'}
+    }
+)
+
+print('Flow enabled!')
+```
+</CodeGroup>
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Flow Runs" icon="play" href="/api/flow-runs">
+    Execute and monitor flow runs
+  </Card>
+  <Card title="Connections" icon="link" href="/api/connections">
+    Manage connections used in flows
+  </Card>
+</CardGroup>

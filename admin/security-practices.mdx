@@ -1,0 +1,605 @@
+---
+title: 'Security Best Practices'
+description: 'Security guidelines for production Activepieces deployments'
+icon: 'shield'
+---
+
+Secure your Activepieces deployment with these production-ready security practices covering network security, secrets management, and data encryption.
+
+## Network Security
+
+Protect your Activepieces instance at the network level:
+
+### TLS/SSL Configuration
+
+<Steps>
+  <Step title="Enable HTTPS">
+    Always use HTTPS in production:
+    
+    ```bash
+    # Environment configuration
+    AP_FRONTEND_URL=https://app.company.com
+    AP_WEBHOOK_URL=https://hooks.company.com
+    ```
+  </Step>
+  
+  <Step title="Use Valid Certificates">
+    Deploy with trusted SSL certificates:
+    - Let's Encrypt (free)
+    - Commercial CA certificates
+    - Internal CA for private deployments
+    
+    ```bash
+    # Configure certificate paths
+    AP_SSL_CERT=/path/to/cert.pem
+    AP_SSL_KEY=/path/to/key.pem
+    ```
+  </Step>
+  
+  <Step title="Enforce TLS 1.2+">
+    Disable older protocols:
+    
+    ```nginx
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+Never run Activepieces in production without HTTPS. Credentials and tokens are transmitted in API requests.
+</Warning>
+
+### Firewall Configuration
+
+Restrict network access to essential ports:
+
+<Tabs>
+  <Tab title="Required Ports">
+    | Port | Service | Access |
+    |------|---------|--------|
+    | 443 | HTTPS API/UI | Public |
+    | 5432 | PostgreSQL | Internal only |
+    | 6379 | Redis | Internal only |
+  </Tab>
+  
+  <Tab title="Optional Ports">
+    | Port | Service | Access |
+    |------|---------|--------|
+    | 80 | HTTP Redirect | Public |
+    | 3000 | Queue Dashboard | Admin IP only |
+  </Tab>
+</Tabs>
+
+### Reverse Proxy Setup
+
+Use a reverse proxy for additional security:
+
+<CodeGroup>
+```nginx Nginx
+server {
+    listen 443 ssl http2;
+    server_name app.company.com;
+    
+    ssl_certificate /path/to/cert.pem;
+    ssl_certificate_key /path/to/key.pem;
+    
+    # Security headers
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    
+    # Rate limiting
+    limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
+    limit_req zone=api burst=20 nodelay;
+    
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+```apache Apache
+<VirtualHost *:443>
+    ServerName app.company.com
+    
+    SSLEngine on
+    SSLCertificateFile /path/to/cert.pem
+    SSLCertificateKeyFile /path/to/key.pem
+    
+    # Security headers
+    Header always set Strict-Transport-Security "max-age=31536000"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-Content-Type-Options "nosniff"
+    
+    ProxyPreserveHost On
+    ProxyPass / http://localhost:3000/
+    ProxyPassReverse / http://localhost:3000/
+</VirtualHost>
+```
+</CodeGroup>
+
+### IP Allowlisting
+
+Restrict admin access by IP:
+
+```nginx
+# Admin endpoints
+location /api/v1/admin {
+    allow 10.0.0.0/8;        # Internal network
+    allow 203.0.113.0/24;    # Office IP range
+    deny all;
+    
+    proxy_pass http://localhost:3000;
+}
+```
+
+## Secrets Management
+
+Properly handle sensitive configuration:
+
+### Environment Variables
+
+<AccordionGroup>
+  <Accordion title="Critical Secrets">
+    Never hardcode these values:
+    
+    ```bash
+    # Database
+    AP_POSTGRES_PASSWORD=<use-secret-manager>
+    
+    # Encryption
+    AP_ENCRYPTION_KEY=<use-secret-manager>
+    
+    # JWT
+    AP_JWT_SECRET=<use-secret-manager>
+    
+    # Redis
+    AP_REDIS_PASSWORD=<use-secret-manager>
+    ```
+  </Accordion>
+  
+  <Accordion title="Secure Generation">
+    Generate strong random secrets:
+    
+    ```bash
+    # Generate encryption key (256-bit)
+    openssl rand -hex 32
+    
+    # Generate JWT secret
+    openssl rand -base64 64
+    
+    # Generate database password
+    openssl rand -base64 32 | tr -d "=+/" | cut -c1-25
+    ```
+  </Accordion>
+  
+  <Accordion title="Secret Rotation">
+    Rotate secrets regularly:
+    - Database passwords: Every 90 days
+    - API keys: Every 180 days
+    - Encryption keys: Use key versioning
+    - JWT secrets: Every year
+  </Accordion>
+</AccordionGroup>
+
+### Secret Manager Integration
+
+Use external secret managers for production:
+
+<CodeGroup>
+```bash AWS Secrets Manager
+# Store secrets in AWS
+aws secretsmanager create-secret \
+  --name activepieces/prod/db-password \
+  --secret-string "your-secure-password"
+
+# Reference in deployment
+AP_POSTGRES_PASSWORD=$(aws secretsmanager get-secret-value \
+  --secret-id activepieces/prod/db-password \
+  --query SecretString --output text)
+```
+
+```bash HashiCorp Vault
+# Store in Vault
+vault kv put secret/activepieces/prod \
+  db_password="your-secure-password" \
+  encryption_key="your-encryption-key"
+
+# Retrieve in deployment
+export AP_POSTGRES_PASSWORD=$(vault kv get -field=db_password secret/activepieces/prod)
+```
+
+```bash Kubernetes Secrets
+# Create Kubernetes secret
+kubectl create secret generic activepieces-secrets \
+  --from-literal=db-password='your-secure-password' \
+  --from-literal=encryption-key='your-encryption-key'
+
+# Reference in pod spec
+env:
+  - name: AP_POSTGRES_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: activepieces-secrets
+        key: db-password
+```
+</CodeGroup>
+
+See [Secret Managers](/admin/secret-managers) for integration details.
+
+## Data Encryption
+
+Activepieces encrypts sensitive data at multiple layers:
+
+### Encryption at Rest
+
+<Steps>
+  <Step title="Database Encryption">
+    Enable PostgreSQL encryption:
+    
+    ```sql
+    -- Enable pgcrypto extension
+    CREATE EXTENSION IF NOT EXISTS pgcrypto;
+    
+    -- Use encrypted tablespaces
+    CREATE TABLESPACE encrypted_space
+      LOCATION '/var/lib/postgresql/encrypted'
+      WITH (encryption = on);
+    ```
+  </Step>
+  
+  <Step title="Application-Level Encryption">
+    Activepieces encrypts:
+    - Connection credentials
+    - OAuth tokens
+    - Webhook secrets
+    - Secret manager configurations
+    
+    Using AES-256-GCM encryption.
+  </Step>
+  
+  <Step title="Backup Encryption">
+    Encrypt database backups:
+    
+    ```bash
+    # Encrypted backup
+    pg_dump activepieces | \
+      openssl enc -aes-256-cbc -pbkdf2 -out backup.sql.enc
+    
+    # Restore
+    openssl enc -d -aes-256-cbc -pbkdf2 -in backup.sql.enc | \
+      psql activepieces
+    ```
+  </Step>
+</Steps>
+
+### Encryption in Transit
+
+<AccordionGroup>
+  <Accordion title="Database Connections">
+    Enable SSL for PostgreSQL:
+    
+    ```bash
+    # Connection string with SSL
+    AP_POSTGRES_DATABASE=postgresql://user:pass@host:5432/db?sslmode=require
+    ```
+    
+    SSL modes:
+    - `require`: Encrypt connection
+    - `verify-ca`: Verify server certificate
+    - `verify-full`: Verify server identity
+  </Accordion>
+  
+  <Accordion title="Redis Connections">
+    Use TLS for Redis:
+    
+    ```bash
+    AP_REDIS_URL=rediss://username:password@host:6380
+    AP_REDIS_TLS=true
+    ```
+  </Accordion>
+  
+  <Accordion title="External API Calls">
+    All outbound connections use HTTPS by default.
+    Pieces validate SSL certificates automatically.
+  </Accordion>
+</AccordionGroup>
+
+### Encryption Key Management
+
+```bash
+# Primary encryption key
+AP_ENCRYPTION_KEY=<256-bit-hex-key>
+
+# Key rotation (future versions will support multiple keys)
+AP_ENCRYPTION_KEY_LEGACY=<old-key>
+```
+
+<Warning>
+The encryption key must remain constant. Changing it will break existing encrypted data. Plan for key rotation using versioning.
+</Warning>
+
+## Access Control
+
+### Authentication Security
+
+<CardGroup cols={2}>
+  <Card title="Strong Passwords" icon="key">
+    Enforce password requirements:
+    - Minimum 12 characters
+    - Mixed case, numbers, symbols
+    - No common passwords
+    - Password history (prevent reuse)
+  </Card>
+  
+  <Card title="Multi-Factor Auth" icon="mobile">
+    Enable 2FA/MFA:
+    - TOTP (Google Authenticator)
+    - SMS (for enterprise)
+    - Hardware keys (FIDO2)
+  </Card>
+  
+  <Card title="Session Management" icon="clock">
+    Configure session security:
+    - Session timeout: 8 hours
+    - Idle timeout: 30 minutes
+    - Concurrent sessions: Limited per user
+  </Card>
+  
+  <Card title="SSO" icon="fingerprint">
+    Use enterprise SSO:
+    - SAML 2.0
+    - OAuth 2.0
+    - Centralized identity management
+  </Card>
+</CardGroup>
+
+### API Security
+
+<Steps>
+  <Step title="API Key Management">
+    ```bash
+    # Generate API key
+    curl -X POST 'https://api.activepieces.com/v1/api-keys' \
+      -H 'Authorization: Bearer {token}' \
+      -d '{
+        "displayName": "Production API",
+        "expiresIn": "90d"
+      }'
+    ```
+  </Step>
+  
+  <Step title="Rate Limiting">
+    Configure rate limits:
+    
+    ```bash
+    AP_RATE_LIMIT_ENABLED=true
+    AP_RATE_LIMIT_MAX_REQUESTS=100
+    AP_RATE_LIMIT_WINDOW_MS=60000
+    ```
+  </Step>
+  
+  <Step title="IP Whitelisting">
+    Restrict API access by IP for sensitive operations
+  </Step>
+</Steps>
+
+## Monitoring & Auditing
+
+### Audit Logging
+
+Enable comprehensive audit logs:
+
+```bash
+AP_AUDIT_LOGS_ENABLED=true
+AP_AUDIT_LOG_RETENTION_DAYS=90
+```
+
+Logged events:
+- User authentication
+- Permission changes
+- Flow modifications
+- Connection management
+- Data access
+
+See [Audit Logs](/admin/audit-logs) for details.
+
+### Security Monitoring
+
+<AccordionGroup>
+  <Accordion title="Failed Login Attempts">
+    Monitor for brute force attacks:
+    
+    ```sql
+    SELECT user_email, COUNT(*) as failed_attempts
+    FROM audit_event
+    WHERE action = 'user.signed.in'
+      AND data->>'success' = 'false'
+      AND created > NOW() - INTERVAL '1 hour'
+    GROUP BY user_email
+    HAVING COUNT(*) > 5;
+    ```
+  </Accordion>
+  
+  <Accordion title="Unusual Activity">
+    Alert on suspicious patterns:
+    - Login from new location
+    - Multiple failed 2FA attempts
+    - Bulk data export
+    - Privilege escalation
+  </Accordion>
+  
+  <Accordion title="System Health">
+    Monitor security-relevant metrics:
+    - Certificate expiration
+    - Secret age
+    - Failed API calls
+    - Database connections
+  </Accordion>
+</AccordionGroup>
+
+## Compliance
+
+### Data Residency
+
+<Steps>
+  <Step title="Deploy in Required Region">
+    Deploy Activepieces in compliant data centers
+  </Step>
+  
+  <Step title="Configure Data Boundaries">
+    Restrict piece usage to region-compliant services
+  </Step>
+  
+  <Step title="Document Data Flow">
+    Maintain data flow diagrams for compliance audits
+  </Step>
+</Steps>
+
+### Compliance Standards
+
+<CardGroup cols={2}>
+  <Card title="GDPR" icon="shield">
+    - Data encryption at rest and in transit
+    - Right to deletion (soft delete)
+    - Audit logs for data access
+    - Data export capabilities
+  </Card>
+  
+  <Card title="SOC 2" icon="certificate">
+    - Access controls and RBAC
+    - Encryption of sensitive data
+    - Audit logging
+    - Incident response procedures
+  </Card>
+  
+  <Card title="HIPAA" icon="hospital">
+    - PHI encryption
+    - Access logging
+    - BAA agreements
+    - Minimum necessary access
+  </Card>
+  
+  <Card title="ISO 27001" icon="file-certificate">
+    - Information security policies
+    - Risk assessment
+    - Access control
+    - Cryptographic controls
+  </Card>
+</CardGroup>
+
+## Vulnerability Management
+
+### Keeping Updated
+
+<Steps>
+  <Step title="Regular Updates">
+    Update Activepieces regularly:
+    
+    ```bash
+    # Check current version
+    curl https://api.activepieces.com/v1/health
+    
+    # Update to latest
+    docker pull activepieces/activepieces:latest
+    ```
+  </Step>
+  
+  <Step title="Security Patches">
+    Subscribe to security announcements:
+    - GitHub security advisories
+    - Release notes
+    - Community forums
+  </Step>
+  
+  <Step title="Dependency Scanning">
+    Scan for vulnerable dependencies:
+    
+    ```bash
+    npm audit
+    docker scan activepieces/activepieces:latest
+    ```
+  </Step>
+</Steps>
+
+### Incident Response
+
+<AccordionGroup>
+  <Accordion title="Detection">
+    Monitor for security incidents:
+    - Audit log anomalies
+    - System alerts
+    - User reports
+  </Accordion>
+  
+  <Accordion title="Response">
+    Incident response procedure:
+    1. Isolate affected systems
+    2. Preserve evidence (logs)
+    3. Assess impact
+    4. Contain breach
+    5. Eradicate threat
+    6. Recover systems
+    7. Post-incident review
+  </Accordion>
+  
+  <Accordion title="Communication">
+    Notify stakeholders:
+    - Internal security team
+    - Affected users
+    - Compliance/legal teams
+    - Regulators (if required)
+  </Accordion>
+</AccordionGroup>
+
+## Security Checklist
+
+<CardGroup cols={2}>
+  <Card title="Network" icon="network-wired">
+    ✅ HTTPS enabled with valid certificate
+    ✅ Firewall configured
+    ✅ Reverse proxy deployed
+    ✅ Rate limiting enabled
+  </Card>
+  
+  <Card title="Secrets" icon="key">
+    ✅ Secrets in secret manager
+    ✅ Strong random secrets
+    ✅ No secrets in code/logs
+    ✅ Regular rotation schedule
+  </Card>
+  
+  <Card title="Encryption" icon="lock">
+    ✅ Database encryption enabled
+    ✅ TLS for all connections
+    ✅ Backups encrypted
+    ✅ Encryption key secured
+  </Card>
+  
+  <Card title="Access Control" icon="shield">
+    ✅ SSO configured
+    ✅ MFA enabled
+    ✅ RBAC implemented
+    ✅ Regular access reviews
+  </Card>
+</CardGroup>
+
+## Related Topics
+
+<CardGroup cols={3}>
+  <Card title="Secret Managers" icon="vault" href="/admin/secret-managers">
+    Integrate secret management
+  </Card>
+  <Card title="Audit Logs" icon="list" href="/admin/audit-logs">
+    Track security events
+  </Card>
+  <Card title="SSO Configuration" icon="fingerprint" href="/admin/sso">
+    Set up SSO authentication
+  </Card>
+</CardGroup>

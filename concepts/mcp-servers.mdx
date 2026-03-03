@@ -1,0 +1,499 @@
+---
+title: 'MCP Servers'
+description: 'Connect Activepieces pieces to AI assistants using Model Context Protocol'
+---
+
+# MCP Servers in Activepieces
+
+Activepieces provides the **largest open source MCP (Model Context Protocol) toolkit** with all 280+ pieces automatically available as MCP servers. Connect your workflows to AI assistants like Claude Desktop, Cursor, and Windsurf, enabling powerful AI-human-tool collaboration.
+
+## What is MCP?
+
+MCP (Model Context Protocol) is a standard protocol that allows Large Language Models (LLMs) to interact with external tools and services. It was developed by Anthropic to enable AI assistants to:
+
+- Access external data sources
+- Execute actions in external systems
+- Retrieve real-time information
+- Perform complex multi-step operations
+
+<Info>
+  MCP acts as a bridge between AI assistants and real-world tools, allowing Claude, Cursor, and other LLM-powered applications to use your Activepieces workflows as callable tools.
+</Info>
+
+## How Activepieces MCP Works
+
+Every Activepieces piece and flow can be exposed as an MCP server tool. Here's how it works:
+
+### 1. MCP Server Configuration
+
+Based on the source code, Activepieces manages MCP servers at the project level:
+
+```typescript
+interface McpServer {
+  id: string;
+  projectId: string;              // Project this MCP server belongs to
+  status: McpServerStatus;        // ENABLED or DISABLED
+  token: string;                  // Authentication token (72 chars)
+  flows: PopulatedFlow[];         // Flows exposed as MCP tools
+}
+
+enum McpServerStatus {
+  ENABLED = 'ENABLED',
+  DISABLED = 'DISABLED',
+}
+```
+
+### 2. MCP Tool Trigger
+
+Flows use a special MCP trigger to expose themselves as callable tools:
+
+```typescript
+const mcpTrigger = {
+  type: 'PIECE',
+  settings: {
+    pieceName: '@activepieces/piece-mcp',
+    triggerName: 'mcp_tool',
+    input: {
+      toolName: 'search_customers',
+      toolDescription: 'Search the customer database by email or name',
+      inputSchema: [
+        {
+          name: 'query',
+          type: McpPropertyType.STRING,
+          description: 'Search query (email or name)'
+        },
+        {
+          name: 'limit',
+          type: McpPropertyType.NUMBER,
+          description: 'Maximum number of results'
+        }
+      ],
+      returnsResponse: true  // Return data to the AI assistant
+    }
+  }
+};
+```
+
+### 3. Tool Execution Flow
+
+When an AI assistant calls an MCP tool:
+
+1. **AI makes request**: Claude/Cursor calls the tool with parameters
+2. **MCP server receives**: Activepieces MCP server accepts the request
+3. **Flow executes**: The associated flow runs with the provided inputs
+4. **Response returned**: Flow output is sent back to the AI assistant
+5. **AI uses result**: Assistant incorporates the data into its response
+
+## Setting Up MCP in Activepieces
+
+<Steps>
+  <Step title="Enable MCP Server">
+    In your Activepieces project settings:
+    
+    1. Navigate to **Project Settings** → **MCP Server**
+    2. Click **Enable MCP Server**
+    3. Copy the generated MCP server token
+    4. Note the server URL (e.g., `https://cloud.activepieces.com/api/v1/mcp`)
+  </Step>
+  
+  <Step title="Create an MCP-Enabled Flow">
+    Create a new flow with an MCP trigger:
+    
+    1. Create a new flow
+    2. Select **MCP Tool** as the trigger
+    3. Configure the tool:
+       - **Tool Name**: `search_database`
+       - **Tool Description**: "Search the customer database"
+       - **Input Schema**: Define expected parameters
+       - **Returns Response**: Enable if the AI needs data back
+    4. Add action steps to perform the work
+    5. Publish the flow
+  </Step>
+  
+  <Step title="Configure Your AI Assistant">
+    Connect your AI assistant to Activepieces MCP server (see sections below).
+  </Step>
+  
+  <Step title="Test the Integration">
+    Ask your AI assistant to use the tool:
+    
+    ```
+    "Can you search for customer john@example.com in the database?"
+    ```
+    
+    The AI will automatically call your Activepieces flow and use the results.
+  </Step>
+</Steps>
+
+## Using with Claude Desktop
+
+Claude Desktop is Anthropic's desktop application that supports MCP servers.
+
+### Configuration
+
+Add Activepieces to your Claude Desktop MCP configuration:
+
+**macOS/Linux**: Edit `~/Library/Application Support/Claude/claude_desktop_config.json`
+
+**Windows**: Edit `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "activepieces": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-activepieces"
+      ],
+      "env": {
+        "ACTIVEPIECES_URL": "https://cloud.activepieces.com",
+        "ACTIVEPIECES_TOKEN": "your-mcp-server-token"
+      }
+    }
+  }
+}
+```
+
+### Using MCP Tools in Claude
+
+Once configured, Claude can automatically discover and use your Activepieces tools:
+
+```
+You: "What tools do you have access to?"
+
+Claude: "I have access to the following Activepieces tools:
+- search_customers: Search the customer database by email or name
+- send_notification: Send a notification to a Slack channel
+- create_ticket: Create a support ticket in the system"
+
+You: "Search for customer jane@example.com"
+
+Claude: [Calls the search_customers MCP tool]
+"I found the customer Jane Smith with email jane@example.com..."
+```
+
+## Using with Cursor
+
+Cursor is an AI-powered code editor that supports MCP servers.
+
+### Configuration
+
+Add Activepieces MCP to your Cursor settings:
+
+1. Open Cursor Settings
+2. Navigate to **AI** → **MCP Servers**
+3. Add a new MCP server:
+
+```json
+{
+  "name": "Activepieces",
+  "url": "https://cloud.activepieces.com/api/v1/mcp",
+  "token": "your-mcp-server-token"
+}
+```
+
+### Using in Cursor
+
+Use Cursor's AI assistant to interact with your Activepieces tools:
+
+```
+You: "@activepieces search for recent orders"
+
+Cursor: [Executes the search_orders tool]
+"Found 5 recent orders: ..."
+```
+
+## Using with Windsurf
+
+Windsurf is another AI-powered development environment with MCP support.
+
+### Configuration
+
+Similar to Cursor, add Activepieces to Windsurf's MCP configuration:
+
+```json
+{
+  "mcpServers": [
+    {
+      "name": "Activepieces",
+      "serverUrl": "https://cloud.activepieces.com/api/v1/mcp",
+      "apiKey": "your-mcp-server-token"
+    }
+  ]
+}
+```
+
+## MCP Tool Input Schema
+
+Define structured inputs for your MCP tools using the input schema:
+
+```typescript
+inputSchema: [
+  {
+    name: 'email',
+    type: McpPropertyType.STRING,
+    description: 'Customer email address',
+    required: true
+  },
+  {
+    name: 'includeOrders',
+    type: McpPropertyType.BOOLEAN,
+    description: 'Include order history',
+    required: false
+  },
+  {
+    name: 'limit',
+    type: McpPropertyType.NUMBER,
+    description: 'Maximum results to return',
+    required: false
+  },
+  {
+    name: 'filters',
+    type: McpPropertyType.OBJECT,
+    description: 'Additional filter criteria',
+    required: false
+  },
+  {
+    name: 'tags',
+    type: McpPropertyType.ARRAY,
+    description: 'List of tags to filter by',
+    required: false
+  }
+]
+```
+
+Supported property types:
+- `STRING`: Text input
+- `NUMBER`: Numeric input
+- `BOOLEAN`: True/false
+- `OBJECT`: JSON object
+- `ARRAY`: List of items
+
+## Returning Data to AI
+
+When `returnsResponse: true`, the flow output is sent back to the AI:
+
+```typescript
+// In your flow's final step, return structured data
+{
+  type: 'CODE',
+  settings: {
+    sourceCode: {
+      code: `
+        export async function code(inputs) {
+          return {
+            customers: inputs.searchResults,
+            totalFound: inputs.searchResults.length,
+            searchTime: new Date().toISOString()
+          };
+        }
+      `
+    }
+  }
+}
+```
+
+The AI receives this data and can use it in its response to the user.
+
+## MCP Server Implementation
+
+Behind the scenes, Activepieces implements a full MCP server using the `@modelcontextprotocol/sdk`:
+
+```typescript
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+
+const server = new McpServer({
+  name: 'Activepieces',
+  version: '1.0.0',
+});
+
+// Register each enabled flow as an MCP tool
+for (const flow of enabledFlows) {
+  const mcpTrigger = flow.version.trigger.settings;
+  const toolName = mcpTrigger.input.toolName;
+  const toolDescription = mcpTrigger.input.toolDescription;
+  const inputSchema = mcpTrigger.input.inputSchema;
+  
+  // Convert input schema to Zod schema
+  const zodSchema = buildZodSchema(inputSchema);
+  
+  // Register tool
+  server.tool(toolName, toolDescription, zodSchema, async (args) => {
+    // Execute the flow with the provided arguments
+    const response = await executeFlow(flow.id, args);
+    return response;
+  });
+}
+```
+
+## Real-World Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Customer Support" icon="headset">
+    Let Claude search your customer database, create tickets, and send notifications - all through natural language.
+  </Card>
+  
+  <Card title="Code Development" icon="code">
+    Use Cursor to query your APIs, update configurations, and deploy services using Activepieces workflows.
+  </Card>
+  
+  <Card title="Data Analysis" icon="chart-line">
+    Ask AI assistants to fetch, analyze, and visualize data from your connected services.
+  </Card>
+  
+  <Card title="DevOps Operations" icon="server">
+    Execute deployment pipelines, check system health, and manage infrastructure through AI commands.
+  </Card>
+</CardGroup>
+
+## Security Considerations
+
+<Note>
+  MCP server tokens provide full access to execute flows in your project. Treat them like API keys:
+  
+  - Store tokens securely
+  - Rotate tokens regularly
+  - Use different tokens for different environments
+  - Disable MCP when not in use
+  - Monitor MCP tool executions in the Runs log
+</Note>
+
+### Token Management
+
+Rotate your MCP token if compromised:
+
+```typescript
+// Via API
+POST /api/v1/mcp/rotate-token
+Authorization: Bearer YOUR_API_KEY
+
+// Returns new token
+{
+  "token": "new-72-character-token",
+  "projectId": "your-project-id"
+}
+```
+
+## Benefits of Activepieces MCP
+
+<CardGroup cols={2}>
+  <Card title="280+ Tools Ready" icon="toolbox">
+    Every Activepieces piece is automatically available as an MCP tool - no extra configuration needed.
+  </Card>
+  
+  <Card title="Type-Safe Integration" icon="shield">
+    Input schemas ensure AI assistants call tools with the correct parameters.
+  </Card>
+  
+  <Card title="Visual Development" icon="eye">
+    Build complex MCP tools using the visual workflow builder instead of writing code.
+  </Card>
+  
+  <Card title="Built-in Authentication" icon="lock">
+    Activepieces handles auth for all connected services - AI doesn't need separate credentials.
+  </Card>
+  
+  <Card title="Audit & Monitoring" icon="chart-line">
+    Track every MCP tool execution in the Runs log for debugging and compliance.
+  </Card>
+  
+  <Card title="Open Source" icon="code">
+    Full source code available - understand exactly how MCP integration works.
+  </Card>
+</CardGroup>
+
+## Example: Complete MCP Tool
+
+Here's a complete example of an MCP-enabled flow that searches a database:
+
+```typescript
+// Flow: "Search Customer Database"
+{
+  displayName: "Search Customer Database",
+  status: FlowStatus.ENABLED,
+  version: {
+    trigger: {
+      type: "PIECE",
+      settings: {
+        pieceName: "@activepieces/piece-mcp",
+        triggerName: "mcp_tool",
+        input: {
+          toolName: "search_customer_database",
+          toolDescription: "Search for customers by email, name, or ID",
+          inputSchema: [
+            {
+              name: "query",
+              type: "STRING",
+              description: "Search query (email, name, or ID)"
+            },
+            {
+              name: "limit",
+              type: "NUMBER",
+              description: "Max results (default 10)"
+            }
+          ],
+          returnsResponse: true
+        }
+      }
+    },
+    actions: [
+      // Step 1: Query database
+      {
+        name: "query_db",
+        type: "PIECE",
+        settings: {
+          pieceName: "@activepieces/piece-postgres",
+          actionName: "execute_query",
+          input: {
+            query: "SELECT * FROM customers WHERE email LIKE $1 OR name LIKE $1 LIMIT $2",
+            params: [
+              "{{trigger.query}}",
+              "{{trigger.limit ?? 10}}"
+            ]
+          }
+        }
+      },
+      // Step 2: Format response
+      {
+        name: "format_response",
+        type: "CODE",
+        settings: {
+          sourceCode: {
+            code: `
+              export async function code(inputs) {
+                return {
+                  success: true,
+                  customers: inputs.results,
+                  count: inputs.results.length,
+                  query: inputs.query
+                };
+              }
+            `
+          },
+          input: {
+            results: "{{steps.query_db.output}}",
+            query: "{{trigger.query}}"
+          }
+        }
+      }
+    ]
+  }
+}
+```
+
+Now AI assistants can search your database:
+
+```
+User: "Find customer with email john@example.com"
+
+Claude: [Calls search_customer_database tool]
+"I found John Smith with email john@example.com. He has been a customer since 2023..."
+```
+
+## Next Steps
+
+- [Build AI Workflows](/concepts/ai-agents) - Create intelligent automations
+- [Create Custom Pieces](/pieces/introduction) - Build your own MCP-enabled tools
+- [API Reference](/api/introduction) - Programmatic access to MCP servers
+- [Workflow Concepts](/concepts/workflows) - Understand flows and triggers

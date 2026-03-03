@@ -1,0 +1,266 @@
+---
+title: 'Project Management'
+description: 'Create and manage multi-tenant projects in Activepieces'
+icon: 'folder-tree'
+---
+
+Projects in Activepieces are isolated workspaces that contain flows, connections, and team members. They enable multi-tenancy and resource isolation in your platform.
+
+## Project Types
+
+Activepieces supports two types of projects:
+
+<CardGroup cols={2}>
+  <Card title="Team Projects" icon="users">
+    Shared workspaces where multiple users collaborate on flows and automations.
+  </Card>
+  <Card title="Personal Projects" icon="user">
+    Individual workspaces for single users with dedicated resources.
+  </Card>
+</CardGroup>
+
+## Creating Projects
+
+<Steps>
+  <Step title="Define Project Details">
+    Set the project display name, type, and optional metadata:
+    
+    ```typescript
+    {
+      displayName: "Marketing Team",
+      type: ProjectType.TEAM,
+      platformId: "platform_123",
+      icon: {
+        color: ColorName.BLUE
+      }
+    }
+    ```
+  </Step>
+  
+  <Step title="Configure Project Icon">
+    Choose from 12 predefined color themes:
+    
+    - RED, BLUE, YELLOW, PURPLE, GREEN, PINK
+    - VIOLET, ORANGE, DARK_GREEN, CYAN
+    - LAVENDER, DEEP_ORANGE
+  </Step>
+  
+  <Step title="Set Resource Limits">
+    Configure concurrent job limits for the project:
+    
+    ```typescript
+    {
+      maxConcurrentJobs: 10  // Limit parallel flow executions
+    }
+    ```
+  </Step>
+</Steps>
+
+## Project Structure
+
+Each project maintains isolated resources:
+
+### Core Components
+
+- **Flows**: Automation workflows specific to the project
+- **Connections**: API credentials and integrations
+- **Members**: Users with assigned roles and permissions
+- **Folders**: Organization structure for flows
+- **Tables**: Data storage within the project
+- **Runs**: Execution history and logs
+
+### Project Metadata
+
+```typescript
+{
+  id: "proj_abc123",
+  displayName: "Marketing Team",
+  platformId: "platform_123",
+  ownerId: "user_owner",
+  type: ProjectType.TEAM,
+  releasesEnabled: true,
+  created: "2026-03-01T00:00:00.000Z",
+  updated: "2026-03-03T00:00:00.000Z"
+}
+```
+
+## Multi-Tenancy
+
+Activepieces provides strong isolation between projects:
+
+<AccordionGroup>
+  <Accordion title="Data Isolation">
+    Each project has completely isolated:
+    - Flow definitions and versions
+    - Connection credentials
+    - Run history and logs
+    - User access controls
+  </Accordion>
+  
+  <Accordion title="Resource Isolation">
+    Projects can have independent:
+    - Concurrent execution limits
+    - Piece allowlists
+    - Custom domains
+    - Webhook endpoints
+  </Accordion>
+  
+  <Accordion title="Access Isolation">
+    Users require explicit membership:
+    - Project-specific roles
+    - Permission-based access
+    - Audit trail per project
+  </Accordion>
+</AccordionGroup>
+
+## Project Plans
+
+Configure piece filtering and restrictions per project:
+
+```typescript
+{
+  projectId: "proj_abc123",
+  name: "Enterprise Plan",
+  piecesFilterType: PiecesFilterType.ALLOWED,
+  pieces: ["@activepieces/piece-slack", "@activepieces/piece-gmail"],
+  locked: false
+}
+```
+
+### Filter Types
+
+<CodeGroup>
+```typescript NONE (Default)
+PiecesFilterType.NONE  // All pieces available
+```
+
+```typescript ALLOWED (Whitelist)
+PiecesFilterType.ALLOWED  // Only specified pieces
+```
+</CodeGroup>
+
+<Info>
+Piece filtering allows you to control which integrations are available to each project, useful for security compliance or custom pricing tiers.
+</Info>
+
+## Project Analytics
+
+Track project usage and activity:
+
+```typescript
+{
+  totalUsers: 8,
+  activeUsers: 5,
+  totalFlows: 23,
+  activeFlows: 15
+}
+```
+
+## External IDs
+
+Link projects to your external systems:
+
+```typescript
+{
+  projectId: "proj_abc123",
+  externalId: "org_456_workspace_789"  // Your system's identifier
+}
+```
+
+<Warning>
+External IDs are optional but recommended for integration with your existing user management or billing systems.
+</Warning>
+
+## Project Releases
+
+Enable version control for projects:
+
+```typescript
+{
+  releasesEnabled: true  // Enable Git-sync and versioning
+}
+```
+
+When enabled, projects support:
+- Flow version control
+- Git synchronization
+- State snapshots
+- Deployment pipelines
+
+See [Project Releases](/admin/projects) for details.
+
+## Soft Deletion
+
+Deleted projects are soft-deleted for recovery:
+
+```typescript
+{
+  deleted: "2026-03-03T00:00:00.000Z"  // Timestamp when deleted
+}
+```
+
+<Info>
+Soft-deleted projects can be restored within your retention period. They don't appear in normal queries but remain in the database.
+</Info>
+
+## API Reference
+
+Common project operations via API:
+
+<CodeGroup>
+```bash Get Project
+curl -X GET 'https://api.activepieces.com/v1/projects/{projectId}' \
+  -H 'Authorization: Bearer {token}'
+```
+
+```bash List Projects
+curl -X GET 'https://api.activepieces.com/v1/projects?limit=10' \
+  -H 'Authorization: Bearer {token}'
+```
+
+```bash Update Project
+curl -X PATCH 'https://api.activepieces.com/v1/projects/{projectId}' \
+  -H 'Authorization: Bearer {token}' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "displayName": "Updated Name",
+    "metadata": {
+      "department": "marketing"
+    }
+  }'
+```
+</CodeGroup>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Naming Conventions" icon="tag">
+    Use clear, descriptive names that reflect team or department structure.
+  </Card>
+  
+  <Card title="Resource Limits" icon="gauge">
+    Set appropriate concurrent job limits based on expected workload.
+  </Card>
+  
+  <Card title="External Mapping" icon="link">
+    Always set externalId to link with your existing systems.
+  </Card>
+  
+  <Card title="Plan Management" icon="list-check">
+    Use piece allowlists to enforce security and compliance policies.
+  </Card>
+</CardGroup>
+
+## Related Topics
+
+<CardGroup cols={3}>
+  <Card title="Users & Permissions" icon="shield" href="/admin/users-permissions">
+    Manage team members and roles
+  </Card>
+  <Card title="Pieces Management" icon="puzzle-piece" href="/admin/pieces-management">
+    Control available integrations
+  </Card>
+  <Card title="Audit Logs" icon="list" href="/admin/audit-logs">
+    Track project activity
+  </Card>
+</CardGroup>

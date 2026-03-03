@@ -1,0 +1,664 @@
+---
+title: Docker Compose Deployment
+description: Deploy Activepieces with PostgreSQL and Redis using Docker Compose
+---
+
+Docker Compose provides a complete production-ready deployment of Activepieces with all required services (PostgreSQL and Redis) in a single configuration file.
+
+## Quick Start
+
+<Steps>
+  <Step title="Create docker-compose.yml">
+    Download the official Docker Compose configuration:
+    
+    ```bash
+    curl -O https://raw.githubusercontent.com/activepieces/activepieces/main/docker-compose.yml
+    ```
+  </Step>
+  
+  <Step title="Create .env file">
+    Copy the example environment file:
+    
+    ```bash
+    curl -O https://raw.githubusercontent.com/activepieces/activepieces/main/.env.example
+    cp .env.example .env
+    ```
+  </Step>
+  
+  <Step title="Configure environment">
+    Edit `.env` and set required values:
+    
+    ```bash
+    # Generate secure keys
+    AP_ENCRYPTION_KEY=$(openssl rand -hex 32)
+    AP_JWT_SECRET=$(openssl rand -hex 32)
+    AP_POSTGRES_PASSWORD=$(openssl rand -hex 16)
+    ```
+  </Step>
+  
+  <Step title="Start services">
+    ```bash
+    docker compose up -d
+    ```
+    
+    Access Activepieces at http://localhost:8080
+  </Step>
+</Steps>
+
+## Docker Compose Configuration
+
+Here's the official `docker-compose.yml` from the Activepieces repository:
+
+```yaml docker-compose.yml
+services:
+  activepieces:
+    image: ghcr.io/activepieces/activepieces:0.79.0
+    container_name: activepieces
+    restart: unless-stopped
+    ## Enable the following line if you already use AP_EXECUTION_MODE with SANDBOX_PROCESS or old activepieces, checking the breaking change documentation for more info.
+    ## privileged: true
+    ports:
+      - '8080:80'
+    depends_on:
+      - postgres
+      - redis
+    env_file: .env
+    volumes:
+      - ./cache:/usr/src/app/cache
+    networks:
+      - activepieces
+      
+  postgres:
+    image: 'postgres:14.4'
+    container_name: postgres
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - 'POSTGRES_DB=${AP_POSTGRES_DATABASE}'
+      - 'POSTGRES_PASSWORD=${AP_POSTGRES_PASSWORD}'
+      - 'POSTGRES_USER=${AP_POSTGRES_USERNAME}'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - activepieces
+      
+  redis:
+    image: 'redis:7.0.7'
+    container_name: redis
+    restart: unless-stopped
+    volumes:
+      - 'redis_data:/data'
+    networks:
+      - activepieces
+      
+volumes:
+  postgres_data:
+  redis_data:
+  
+networks:
+  activepieces:
+```
+
+## Service Breakdown
+
+### Activepieces Service
+
+<ParamField path="activepieces" type="service">
+  Main application container
+  
+  **Configuration:**
+  - **Image**: `ghcr.io/activepieces/activepieces:0.79.0`
+  - **Ports**: 8080 (host) → 80 (container)
+  - **Restart Policy**: `unless-stopped` (auto-restart on failure)
+  - **Dependencies**: Waits for PostgreSQL and Redis
+  - **Volumes**: `./cache` for temporary files
+</ParamField>
+
+```yaml
+activepieces:
+  image: ghcr.io/activepieces/activepieces:0.79.0
+  container_name: activepieces
+  restart: unless-stopped
+  ports:
+    - '8080:80'
+  depends_on:
+    - postgres
+    - redis
+  env_file: .env
+  volumes:
+    - ./cache:/usr/src/app/cache
+  networks:
+    - activepieces
+```
+
+<Info>
+The `depends_on` directive ensures PostgreSQL and Redis start before Activepieces, but doesn't wait for them to be ready. The application will retry connections on startup.
+</Info>
+
+### PostgreSQL Service
+
+<ParamField path="postgres" type="service">
+  Database for storing workflows, executions, and user data
+  
+  **Configuration:**
+  - **Image**: `postgres:14.4`
+  - **Volume**: Named volume `postgres_data` for persistence
+  - **Environment**: Database credentials from `.env` file
+</ParamField>
+
+```yaml
+postgres:
+  image: 'postgres:14.4'
+  container_name: postgres
+  restart: unless-stopped
+  env_file: .env
+  environment:
+    - 'POSTGRES_DB=${AP_POSTGRES_DATABASE}'
+    - 'POSTGRES_PASSWORD=${AP_POSTGRES_PASSWORD}'
+    - 'POSTGRES_USER=${AP_POSTGRES_USERNAME}'
+  volumes:
+    - postgres_data:/var/lib/postgresql/data
+  networks:
+    - activepieces
+```
+
+<Warning>
+PostgreSQL data is stored in a Docker named volume. Removing this volume will delete all your data. Always backup before major changes.
+</Warning>
+
+### Redis Service
+
+<ParamField path="redis" type="service">
+  Job queue for background processing using BullMQ
+  
+  **Configuration:**
+  - **Image**: `redis:7.0.7`
+  - **Volume**: Named volume `redis_data` for persistence
+  - **Port**: 6379 (internal only, not exposed to host)
+</ParamField>
+
+```yaml
+redis:
+  image: 'redis:7.0.7'
+  container_name: redis
+  restart: unless-stopped
+  volumes:
+    - 'redis_data:/data'
+  networks:
+    - activepieces
+```
+
+## Environment Configuration
+
+Create a `.env` file with the following minimum configuration:
+
+```bash .env
+## Engine executable path
+AP_ENGINE_EXECUTABLE_PATH=dist/packages/engine/main.js
+
+## Security Keys (Generate with: openssl rand -hex 32)
+AP_ENCRYPTION_KEY=your_32_char_hex_encryption_key
+AP_JWT_SECRET=your_jwt_secret_key
+
+## Environment
+AP_ENVIRONMENT=prod
+AP_FRONTEND_URL=http://localhost:8080
+
+## Database Configuration
+AP_POSTGRES_DATABASE=activepieces
+AP_POSTGRES_HOST=postgres
+AP_POSTGRES_PORT=5432
+AP_POSTGRES_USERNAME=postgres
+AP_POSTGRES_PASSWORD=your_secure_postgres_password
+
+## Redis Configuration
+AP_REDIS_HOST=redis
+AP_REDIS_PORT=6379
+
+## Execution
+AP_EXECUTION_MODE=UNSANDBOXED
+AP_FLOW_TIMEOUT_SECONDS=600
+AP_WEBHOOK_TIMEOUT_SECONDS=30
+AP_TRIGGER_DEFAULT_POLL_INTERVAL=5
+
+## Telemetry
+AP_TELEMETRY_ENABLED=true
+AP_TEMPLATES_SOURCE_URL="https://cloud.activepieces.com/api/v1/flow-templates"
+```
+
+See [Environment Variables](/deployment/environment-variables) for all available options.
+
+## Managing Services
+
+### Starting Services
+
+<Tabs>
+  <Tab title="Start All">
+    ```bash
+    # Start in detached mode
+    docker compose up -d
+    
+    # Start with logs
+    docker compose up
+    ```
+  </Tab>
+  
+  <Tab title="Start Specific Service">
+    ```bash
+    # Start only Activepieces
+    docker compose up -d activepieces
+    
+    # Start only database
+    docker compose up -d postgres
+    ```
+  </Tab>
+  
+  <Tab title="Rebuild and Start">
+    ```bash
+    # Rebuild images before starting
+    docker compose up -d --build
+    
+    # Pull latest images
+    docker compose pull
+    docker compose up -d
+    ```
+  </Tab>
+</Tabs>
+
+### Stopping Services
+
+<Tabs>
+  <Tab title="Stop All">
+    ```bash
+    # Stop services (keep containers)
+    docker compose stop
+    
+    # Stop and remove containers
+    docker compose down
+    ```
+  </Tab>
+  
+  <Tab title="Stop Specific Service">
+    ```bash
+    docker compose stop activepieces
+    ```
+  </Tab>
+  
+  <Tab title="Stop and Remove Volumes">
+    ```bash
+    # WARNING: This deletes all data!
+    docker compose down -v
+    ```
+  </Tab>
+</Tabs>
+
+### Viewing Logs
+
+```bash
+# All services
+docker compose logs -f
+
+# Specific service
+docker compose logs -f activepieces
+
+# Last 100 lines
+docker compose logs --tail 100 activepieces
+```
+
+## Networking
+
+Docker Compose creates a private network for service communication:
+
+```yaml
+networks:
+  activepieces:
+```
+
+**Service Discovery:**
+- Activepieces connects to PostgreSQL using hostname `postgres`
+- Activepieces connects to Redis using hostname `redis`
+- Services communicate internally without exposing ports to host
+
+## Data Persistence
+
+Three types of volumes are used:
+
+<Tabs>
+  <Tab title="Named Volumes">
+    Docker-managed volumes for database data:
+    
+    ```yaml
+    volumes:
+      postgres_data:  # PostgreSQL data
+      redis_data:     # Redis persistence
+    ```
+    
+    **Location**: `/var/lib/docker/volumes/`
+    
+    **List volumes**:
+    ```bash
+    docker volume ls
+    ```
+    
+    **Inspect volume**:
+    ```bash
+    docker volume inspect activepieces_postgres_data
+    ```
+  </Tab>
+  
+  <Tab title="Bind Mounts">
+    Host directory mounted into container:
+    
+    ```yaml
+    volumes:
+      - ./cache:/usr/src/app/cache
+    ```
+    
+    **Location**: Current directory `./cache`
+    
+    Create directory before starting:
+    ```bash
+    mkdir -p cache
+    chmod 755 cache
+    ```
+  </Tab>
+</Tabs>
+
+## Backup and Restore
+
+### Database Backup
+
+<Steps>
+  <Step title="Backup PostgreSQL">
+    ```bash
+    # Create backup
+    docker compose exec postgres pg_dump -U postgres activepieces > backup.sql
+    
+    # Or with timestamp
+    docker compose exec postgres pg_dump -U postgres activepieces > backup-$(date +%Y%m%d-%H%M%S).sql
+    ```
+  </Step>
+  
+  <Step title="Restore PostgreSQL">
+    ```bash
+    # Stop Activepieces first
+    docker compose stop activepieces
+    
+    # Drop and recreate database
+    docker compose exec postgres psql -U postgres -c "DROP DATABASE activepieces;"
+    docker compose exec postgres psql -U postgres -c "CREATE DATABASE activepieces;"
+    
+    # Restore backup
+    docker compose exec -T postgres psql -U postgres activepieces < backup.sql
+    
+    # Restart Activepieces
+    docker compose start activepieces
+    ```
+  </Step>
+</Steps>
+
+### Volume Backup
+
+```bash
+# Backup PostgreSQL volume
+docker run --rm \
+  -v activepieces_postgres_data:/data \
+  -v $(pwd):/backup \
+  ubuntu tar czf /backup/postgres-backup.tar.gz /data
+
+# Backup Redis volume
+docker run --rm \
+  -v activepieces_redis_data:/data \
+  -v $(pwd):/backup \
+  ubuntu tar czf /backup/redis-backup.tar.gz /data
+```
+
+## Production Optimizations
+
+### Resource Limits
+
+Add resource constraints to prevent containers from using too much memory/CPU:
+
+```yaml docker-compose.yml
+services:
+  activepieces:
+    # ... existing config ...
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+          
+  postgres:
+    # ... existing config ...
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+```
+
+### Health Checks
+
+Add health checks to ensure services are running correctly:
+
+```yaml docker-compose.yml
+services:
+  activepieces:
+    # ... existing config ...
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+      
+  postgres:
+    # ... existing config ...
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+```
+
+### Logging Configuration
+
+Limit log file size to prevent disk issues:
+
+```yaml docker-compose.yml
+services:
+  activepieces:
+    # ... existing config ...
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+```
+
+## Updating Activepieces
+
+<Steps>
+  <Step title="Pull latest images">
+    ```bash
+    docker compose pull
+    ```
+  </Step>
+  
+  <Step title="Backup database">
+    ```bash
+    docker compose exec postgres pg_dump -U postgres activepieces > backup-before-update.sql
+    ```
+  </Step>
+  
+  <Step title="Restart with new images">
+    ```bash
+    docker compose up -d
+    ```
+    
+    Docker Compose will recreate containers with new images while preserving volumes.
+  </Step>
+  
+  <Step title="Verify update">
+    ```bash
+    docker compose logs -f activepieces
+    ```
+    
+    Check for successful startup and database migrations.
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Services won't start">
+    Check service status:
+    ```bash
+    docker compose ps
+    ```
+    
+    View logs for errors:
+    ```bash
+    docker compose logs
+    ```
+    
+    Common issues:
+    - Port 8080 already in use
+    - Missing or invalid `.env` file
+    - Insufficient disk space for volumes
+  </Accordion>
+  
+  <Accordion title="Cannot connect to database">
+    Verify PostgreSQL is running:
+    ```bash
+    docker compose ps postgres
+    ```
+    
+    Check database logs:
+    ```bash
+    docker compose logs postgres
+    ```
+    
+    Test connection:
+    ```bash
+    docker compose exec postgres psql -U postgres -d activepieces -c "SELECT 1;"
+    ```
+  </Accordion>
+  
+  <Accordion title="Redis connection errors">
+    Verify Redis is running:
+    ```bash
+    docker compose ps redis
+    ```
+    
+    Test Redis connection:
+    ```bash
+    docker compose exec redis redis-cli ping
+    ```
+    
+    Should return: `PONG`
+  </Accordion>
+  
+  <Accordion title="Disk space issues">
+    Check disk usage:
+    ```bash
+    docker system df
+    ```
+    
+    Clean up unused resources:
+    ```bash
+    docker system prune -a
+    ```
+    
+    Check volume sizes:
+    ```bash
+    docker system df -v
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Advanced Configuration
+
+### Using External PostgreSQL
+
+If you have an existing PostgreSQL server:
+
+```yaml docker-compose.yml
+services:
+  activepieces:
+    # ... existing config ...
+    # Remove depends_on postgres
+    environment:
+      AP_POSTGRES_HOST: external-postgres.example.com
+      AP_POSTGRES_PORT: 5432
+      AP_POSTGRES_DATABASE: activepieces
+      AP_POSTGRES_USERNAME: activepieces_user
+      AP_POSTGRES_PASSWORD: secure_password
+      AP_POSTGRES_USE_SSL: "true"
+      
+# Remove postgres service entirely
+```
+
+### Using External Redis
+
+If you have an existing Redis server:
+
+```yaml docker-compose.yml
+services:
+  activepieces:
+    # ... existing config ...
+    # Remove depends_on redis
+    environment:
+      AP_REDIS_HOST: external-redis.example.com
+      AP_REDIS_PORT: 6379
+      AP_REDIS_PASSWORD: redis_password
+      AP_REDIS_USE_SSL: "true"
+      
+# Remove redis service entirely
+```
+
+### Multiple Activepieces Instances
+
+Scale the Activepieces service for high availability:
+
+```yaml docker-compose.yml
+services:
+  activepieces:
+    # ... existing config ...
+    deploy:
+      replicas: 3
+      
+  # Add a load balancer
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - activepieces
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Environment Variables" icon="gear" href="/deployment/environment-variables">
+    Configure all available options
+  </Card>
+  <Card title="Database Setup" icon="database" href="/deployment/database">
+    Advanced PostgreSQL configuration
+  </Card>
+  <Card title="Scaling" icon="chart-line" href="/deployment/scaling">
+    Scale your deployment
+  </Card>
+  <Card title="Storage" icon="hard-drive" href="/deployment/storage">
+    Configure S3 storage
+  </Card>
+</CardGroup>

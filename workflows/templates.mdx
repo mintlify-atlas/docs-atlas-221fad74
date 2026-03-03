@@ -1,0 +1,630 @@
+---
+title: Using Templates
+description: Get started quickly with pre-built workflow templates, customize them, and share your own
+icon: 'clone'
+---
+
+Templates are pre-built workflows that help you get started quickly. Activepieces provides official templates for common use cases, and you can create your own.
+
+## Understanding Templates
+
+A template is a reusable workflow blueprint:
+
+```typescript
+// From packages/shared/src/lib/management/template/template.ts
+export type Template = {
+  id: string,
+  name: string,
+  type: TemplateType,  // OFFICIAL, SHARED, or CUSTOM
+  summary: string,
+  description: string,
+  tags: TemplateTag[],
+  author: string,
+  categories: string[],
+  pieces: string[],    // Required integrations
+  flows: FlowVersionTemplate[],
+  status: TemplateStatus  // PUBLISHED or ARCHIVED
+}
+```
+
+### Template Types
+
+```typescript
+export enum TemplateType {
+  OFFICIAL = 'OFFICIAL',  // Created by Activepieces
+  SHARED = 'SHARED',      // Shared by community
+  CUSTOM = 'CUSTOM'       // Your private templates
+}
+```
+
+<CardGroup cols={3}>
+  <Card title="Official" icon="badge-check">
+    Verified templates from Activepieces team. Production-ready and well-tested.
+  </Card>
+  <Card title="Shared" icon="users">
+    Templates shared by the community. Various quality and use cases.
+  </Card>
+  <Card title="Custom" icon="user">
+    Your private templates. Only visible to your team.
+  </Card>
+</CardGroup>
+
+## Browsing Templates
+
+<Steps>
+  <Step title="Open Template Gallery">
+    Navigate to **Templates** in the main menu.
+  </Step>
+
+  <Step title="Browse or Search">
+    Filter templates by:
+
+    ```typescript
+    // From packages/shared/src/lib/management/template/template.requests.ts
+    type ListTemplatesRequestQuery = {
+      type?: TemplateType,      // Filter by type
+      pieces?: string[],        // Filter by integrations
+      tags?: string[],          // Filter by tags
+      search?: string,          // Search by name/description
+      category?: string         // Filter by category
+    }
+    ```
+
+    <Tabs>
+      <Tab title="By Category">
+        - Sales & CRM
+        - Marketing
+        - Customer Support
+        - HR & Recruiting
+        - Data & Analytics
+        - Productivity
+      </Tab>
+
+      <Tab title="By Integration">
+        - Gmail
+        - Slack
+        - Google Sheets
+        - HubSpot
+        - Salesforce
+        - And more...
+      </Tab>
+
+      <Tab title="By Use Case">
+        - Lead generation
+        - Email automation
+        - Data synchronization
+        - Notifications
+        - Report generation
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Preview Template">
+    Click on a template to see:
+    - Full description
+    - Required integrations
+    - Visual workflow preview
+    - Setup instructions
+  </Step>
+</Steps>
+
+## Using a Template
+
+<Steps>
+  <Step title="Select Template">
+    Click **Use Template** on the template you want.
+  </Step>
+
+  <Step title="Template is Imported">
+    The template creates a new flow in your project:
+
+    ```typescript
+    // From packages/shared/src/lib/management/template/template.ts
+    export type FlowVersionTemplate = {
+      displayName: string,
+      trigger: FlowTrigger,
+      valid: boolean,
+      schemaVersion: string,
+      description?: string,
+      notes?: Note[]  // Setup instructions
+    }
+    ```
+
+    <Note>
+    Connections are **not** imported. You'll need to configure authentication.
+    </Note>
+  </Step>
+
+  <Step title="Configure Connections">
+    Set up required connections:
+
+    1. Click on steps showing connection errors
+    2. Select or create connections
+    3. Authenticate with services
+
+    ```typescript
+    // Connections are removed from templates
+    // From packages/server/api/src/app/flows/flow-version/flow-version.service.ts
+    removeConnectionsAndSampleDataFromFlowVersion(
+      flowVersion,
+      removeConnectionNames: true,  // Strip connection references
+      removeSampleData: true        // Strip sample data
+    )
+    ```
+  </Step>
+
+  <Step title="Customize Settings">
+    Adjust template settings for your use case:
+
+    - Update recipient emails
+    - Change schedule timing
+    - Modify data mappings
+    - Add or remove steps
+  </Step>
+
+  <Step title="Test the Flow">
+    Test with sample data:
+
+    1. Configure trigger with test data
+    2. Click **Test Flow**
+    3. Verify all steps execute correctly
+    4. Check output data
+  </Step>
+
+  <Step title="Publish and Enable">
+    When ready:
+
+    1. Click **Publish**
+    2. Toggle flow to **Enabled**
+    3. Monitor initial runs
+  </Step>
+</Steps>
+
+## Template Structure
+
+### Flow Version Template
+
+```typescript
+// Simplified version of FlowVersion for templates
+export const FlowVersionTemplate = Type.Composite([
+  Type.Omit(FlowVersion, [
+    'id',              // Generated on import
+    'created',         // Set on import
+    'updated',         // Set on import
+    'flowId',          // Assigned on import
+    'state',           // Always DRAFT
+    'updatedBy',       // Set to importer
+    'agentIds',        // Recalculated
+    'connectionIds',   // Recalculated
+    'backupFiles',     // Not included
+    'notes'            // Optional
+  ]),
+  Type.Object({
+    description: Type.Optional(Type.String()),  // Template description
+    notes: Type.Optional(Type.Array(Note))      // Setup instructions
+  })
+])
+```
+
+### Template Metadata
+
+```typescript
+{
+  "name": "Send Welcome Email to New Users",
+  "summary": "Automatically send welcome emails when new users sign up",
+  "description": "This template monitors your user database and sends personalized welcome emails...",
+  "tags": [
+    {
+      "title": "Popular",
+      "color": "#3B82F6",
+      "icon": "star"
+    },
+    {
+      "title": "Email",
+      "color": "#10B981"
+    }
+  ],
+  "author": "Activepieces Team",
+  "categories": ["Marketing", "Customer Engagement"],
+  "pieces": [
+    "@activepieces/piece-gmail",
+    "@activepieces/piece-webhook"
+  ]
+}
+```
+
+## Customizing Templates
+
+Once imported, templates are regular flows you can fully customize:
+
+### Common Customizations
+
+<Tabs>
+  <Tab title="Change Recipients">
+    Update email addresses and notification targets:
+
+    ```typescript
+    {
+      "input": {
+        "to": "your-email@example.com",  // Replace template email
+        "cc": "team@example.com"
+      }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Adjust Schedule">
+    Modify trigger timing:
+
+    ```typescript
+    {
+      "trigger": {
+        "type": "PIECE",
+        "settings": {
+          "pieceName": "@activepieces/piece-schedule",
+          "triggerName": "cron_expression",
+          "input": {
+            "cronExpression": "0 9 * * 1-5"  // Weekdays at 9 AM
+          }
+        }
+      }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Add Steps">
+    Extend the template with additional steps:
+
+    - Add data transformation
+    - Insert validation logic
+    - Include error notifications
+    - Add logging or analytics
+  </Tab>
+
+  <Tab title="Modify Data Mapping">
+    Adjust how data flows between steps:
+
+    ```typescript
+    {
+      "input": {
+        // Template might use:
+        "name": "{{ trigger.body.user.name }}",
+        
+        // Customize to your data structure:
+        "name": "{{ trigger.body.firstName + ' ' + trigger.body.lastName }}"
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Creating Your Own Templates
+
+### Save Flow as Template
+
+<Steps>
+  <Step title="Build Your Flow">
+    Create and test a workflow you want to reuse.
+  </Step>
+
+  <Step title="Clean Up">
+    Remove project-specific details:
+    - Sensitive data
+    - Specific email addresses
+    - Internal URLs
+    - Test connections
+  </Step>
+
+  <Step title="Add Documentation">
+    Use flow notes to document:
+    - What the template does
+    - Required setup steps
+    - Configuration instructions
+    - Example use cases
+  </Step>
+
+  <Step title="Export Flow">
+    Export your flow to create a template:
+
+    1. Open flow settings
+    2. Click **Export**
+    3. Save the JSON file
+  </Step>
+
+  <Step title="Create Template (Optional)">
+    For platform administrators:
+
+    ```typescript
+    // From packages/shared/src/lib/management/template/template.requests.ts
+    const createTemplateRequest: CreateTemplateRequestBody = {
+      name: "Your Template Name",
+      summary: "Brief description",
+      description: "Detailed explanation...",
+      tags: [
+        { title: "Automation", color: "#3B82F6" }
+      ],
+      author: "Your Name",
+      categories: ["Productivity"],
+      type: TemplateType.CUSTOM,
+      flows: [flowVersionTemplate]
+    }
+    ```
+  </Step>
+</Steps>
+
+## Template Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Generic Names">
+    Name variables and steps generically:
+
+    ```typescript
+    // Good
+    "get_user_data"
+    "send_notification"
+    "process_items"
+
+    // Bad (too specific)
+    "get_john_smith_data"
+    "send_to_sales_team"
+    "process_march_orders"
+    ```
+  </Accordion>
+
+  <Accordion title="Document Requirements">
+    Clearly state what's needed:
+
+    ```typescript
+    {
+      "notes": [
+        {
+          "content": "Setup Instructions:\n1. Connect your Gmail account\n2. Update recipient email in Send Email step\n3. Test with sample data\n4. Enable flow"
+        }
+      ]
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Handle Edge Cases">
+    Include error handling:
+    - Empty arrays
+    - Missing data
+    - API failures
+    - Invalid inputs
+  </Accordion>
+
+  <Accordion title="Use Meaningful Defaults">
+    Provide sensible default values:
+
+    ```typescript
+    {
+      "input": {
+        "subject": "New Notification",  // Clear default
+        "limit": 10,                     // Reasonable limit
+        "timeout": 30000                 // 30 seconds
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Test Thoroughly">
+    Before sharing:
+    - Test with various inputs
+    - Verify error handling
+    - Check performance
+    - Document limitations
+  </Accordion>
+</AccordionGroup>
+
+## Popular Template Categories
+
+### Sales & CRM
+
+- New lead notifications
+- Contact synchronization
+- Deal stage updates
+- Quote generation
+- Sales report automation
+
+### Marketing
+
+- Email campaign automation
+- Social media posting
+- Lead scoring
+- Newsletter management
+- Analytics reporting
+
+### Customer Support
+
+- Ticket creation
+- Auto-responses
+- Escalation workflows
+- Customer feedback collection
+- Support metrics tracking
+
+### Data & Analytics
+
+- Data synchronization
+- Report generation
+- Dashboard updates
+- Data backup
+- ETL pipelines
+
+## Template Tags
+
+```typescript
+export type TemplateTag = {
+  title: string,
+  color: string,  // Hex color
+  icon?: string   // Optional icon name
+}
+```
+
+Common tags:
+
+<CardGroup cols={3}>
+  <Card title="Popular" icon="star">
+    Most used templates
+  </Card>
+  <Card title="New" icon="sparkles">
+    Recently added
+  </Card>
+  <Card title="Advanced" icon="graduation-cap">
+    Complex workflows
+  </Card>
+  <Card title="Quick Start" icon="rocket">
+    Easy to set up
+  </Card>
+  <Card title="Integration" icon="puzzle-piece">
+    Connects multiple services
+  </Card>
+  <Card title="Automation" icon="robot">
+    Fully automated workflows
+  </Card>
+</CardGroup>
+
+## Sharing Templates
+
+### Internal Sharing
+
+Share templates within your organization:
+
+1. **Export Flow**: Export as JSON
+2. **Share File**: Send to team members
+3. **Import**: Team members import the JSON
+4. **Configure**: Each user sets up connections
+
+### Community Sharing
+
+Share with the Activepieces community:
+
+1. **Prepare Template**: Clean and document thoroughly
+2. **Submit**: Share on community forums
+3. **Review**: Community reviews and tests
+4. **Publish**: Added to template gallery
+
+<Note>
+Only share templates that don't contain sensitive information or proprietary logic.
+</Note>
+
+## Template Limitations
+
+<Warning>
+Templates **do not include**:
+
+- Connection credentials
+- Sample data
+- Run history
+- Version history
+- User-specific settings
+- Project-specific configurations
+</Warning>
+
+You must configure these after importing.
+
+## Troubleshooting Templates
+
+<AccordionGroup>
+  <Accordion title="Template Import Fails">
+    **Problem**: Error when importing template.
+
+    **Solutions**:
+    - Verify JSON is valid
+    - Check required pieces are available
+    - Ensure you have necessary permissions
+    - Try importing to different project
+  </Accordion>
+
+  <Accordion title="Missing Integrations">
+    **Problem**: Template requires pieces you don't have.
+
+    **Solutions**:
+    - Install required pieces
+    - Contact administrator for piece installation
+    - Find alternative template
+    - Modify template to use available pieces
+  </Accordion>
+
+  <Accordion title="Validation Errors After Import">
+    **Problem**: Template imports but shows validation errors.
+
+    **Reasons**:
+    - Missing connections (expected)
+    - Piece versions incompatible
+    - Schema migration issues
+
+    **Solutions**:
+    - Configure connections (normal)
+    - Update piece versions
+    - Check for deprecation warnings
+  </Accordion>
+
+  <Accordion title="Template Doesn't Work As Expected">
+    **Problem**: Template executes but doesn't produce expected results.
+
+    **Check**:
+    - Connection authentication
+    - Data structure matches expectations
+    - All required configuration completed
+    - Trigger is properly set up
+  </Accordion>
+</AccordionGroup>
+
+## Finding the Right Template
+
+<Steps>
+  <Step title="Define Your Goal">
+    What do you want to automate?
+    - What triggers the workflow?
+    - What actions should happen?
+    - What services are involved?
+  </Step>
+
+  <Step title="Search Templates">
+    Use specific keywords:
+    - Integration names ("Gmail", "Slack")
+    - Actions ("send email", "create ticket")
+    - Use cases ("lead notification", "daily report")
+  </Step>
+
+  <Step title="Review Requirements">
+    Check if you have:
+    - Required integrations
+    - Necessary permissions
+    - Access to services
+    - Technical skills needed
+  </Step>
+
+  <Step title="Compare Options">
+    If multiple templates match:
+    - Review complexity
+    - Check recency (newer is often better)
+    - Read descriptions carefully
+    - Look at author (official vs. community)
+  </Step>
+
+  <Step title="Start Simple">
+    If new to Activepieces:
+    - Choose simpler templates first
+    - Look for "Quick Start" tags
+    - Avoid "Advanced" templates initially
+    - Build understanding gradually
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Building Flows" icon="hammer" href="/workflows/building-flows">
+    Learn to build custom workflows
+  </Card>
+  <Card title="Publishing" icon="rocket" href="/workflows/publishing">
+    Publish your customized template
+  </Card>
+  <Card title="Versioning" icon="clock-rotate-left" href="/workflows/versioning">
+    Manage template versions
+  </Card>
+  <Card title="Best Practices" icon="star" href="/workflows/building-flows">
+    Workflow best practices
+  </Card>
+</CardGroup>

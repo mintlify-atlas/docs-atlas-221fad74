@@ -1,80 +1,228 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: 'Quickstart'
+description: 'Create your first workflow in Activepieces'
 ---
 
-## Get started in three steps
+# Getting Started with Activepieces
 
-Get your documentation site running locally and make your first customization.
+This guide will walk you through creating your first workflow in Activepieces. You'll learn how to set up triggers, add actions, connect pieces, and publish your automation.
 
-### Step 1: Set up your local environment
+## Choose Your Path
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
+You can get started with Activepieces in two ways:
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Cloud (Recommended)" icon="cloud">
+    Sign up for a free account at [cloud.activepieces.com](https://cloud.activepieces.com) and start building immediately.
+  </Card>
+  
+  <Card title="Self-Hosted" icon="server">
+    Run Activepieces on your own infrastructure. See the [deployment guide](/deployment/overview) for instructions.
+  </Card>
 </CardGroup>
 
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>
+## Create Your First Workflow
+
+<Steps>
+  <Step title="Create an Account or Run Locally">
+    **Option 1: Cloud**
+    
+    Visit [cloud.activepieces.com](https://cloud.activepieces.com) and sign up for a free account.
+    
+    **Option 2: Local Development**
+    
+    Clone the repository and start the development environment:
+    
+    ```bash
+    git clone https://github.com/activepieces/activepieces.git
+    cd activepieces
+    npm install
+    npm start
+    ```
+    
+    The application will be available at `http://localhost:4200`
+  </Step>
+  
+  <Step title="Create a New Flow">
+    Once logged in, click the **"Create Flow"** button in your dashboard.
+    
+    Give your flow a descriptive name, such as "My First Automation" or "Webhook to Slack".
+    
+    <Note>
+      Flows in Activepieces are called "flows" throughout the codebase and can be thought of as workflows or automations.
+    </Note>
+  </Step>
+  
+  <Step title="Set Up a Trigger">
+    Every flow starts with a trigger. Triggers determine when your automation runs.
+    
+    For this example, let's use a **Webhook** trigger:
+    
+    1. Click on the trigger step (the first step in your flow)
+    2. Search for and select **"Webhook"**
+    3. The webhook URL will be automatically generated
+    4. Copy this URL - you'll use it to test your flow
+    
+    <Info>
+      Other popular triggers include:
+      - **Schedule**: Run on a cron schedule (every hour, daily, etc.)
+      - **App Events**: Trigger from specific apps (new email, new row in Google Sheets, etc.)
+      - **MCP Tool**: Expose your flow as an MCP server tool for AI assistants
+    </Info>
+  </Step>
+  
+  <Step title="Add Your First Action">
+    Actions are the steps that execute when your trigger fires. Let's add a simple action:
+    
+    1. Click the **"+"** button below your trigger
+    2. Search for **"Data Mapper"** or **"HTTP Request"**
+    3. Configure the action:
+    
+    **Example: Send to Slack**
+    
+    If you want to send a message to Slack:
+    
+    1. Search for and select **"Slack"**
+    2. Choose **"Send Message to Channel"**
+    3. Connect your Slack account (click "+ New Connection")
+    4. Select a channel
+    5. Write your message - you can reference trigger data using `{{trigger.body}}`
+    
+    **Example: HTTP Request**
+    
+    Or make a simple HTTP request:
+    
+    1. Select **"HTTP"** piece
+    2. Choose **"Send Request"** action
+    3. Set method to `POST`
+    4. Enter URL: `https://httpbin.org/post`
+    5. Add body with trigger data: `{{trigger}}`
+  </Step>
+  
+  <Step title="Connect a Piece (Integration)">
+    Most pieces require authentication. Here's how to connect them:
+    
+    1. When configuring an action that needs auth, you'll see **"+ New Connection"**
+    2. Click it to open the authentication dialog
+    3. Depending on the piece, you'll either:
+       - Enter an API key directly
+       - Go through OAuth flow (for Google, Slack, etc.)
+       - Provide connection details (for databases, etc.)
+    4. Give your connection a name
+    5. Click **"Save"**
+    
+    <Note>
+      Connections are securely stored and can be reused across multiple flows in your project.
+    </Note>
+  </Step>
+  
+  <Step title="Test Your Flow">
+    Before publishing, test your flow:
+    
+    1. Click the **"Test Flow"** button in the top right
+    2. For webhook triggers, use curl or a tool like Postman:
+    
+    ```bash
+    curl -X POST https://cloud.activepieces.com/api/v1/webhooks/YOUR_WEBHOOK_ID \
+      -H "Content-Type: application/json" \
+      -d '{"message": "Hello from Activepieces!"}'
+    ```
+    
+    3. Watch the execution in real-time
+    4. Click on each step to see input/output data
+    5. Fix any errors and test again
+    
+    <Info>
+      Test runs don't count against your execution limits and help you debug before going live.
+    </Info>
+  </Step>
+  
+  <Step title="Publish Your Flow">
+    Once testing is successful:
+    
+    1. Click **"Publish"** in the top right
+    2. Your flow is now live and will execute automatically when triggered
+    3. The flow status changes from **DRAFT** to **ENABLED**
+    
+    You can monitor executions in the **"Runs"** tab to see:
+    - Execution history
+    - Success/failure status
+    - Step-by-step execution logs
+    - Input and output data
+  </Step>
+</Steps>
+
+## Example: Complete Webhook to Slack Flow
+
+Here's a complete example of a flow that receives webhook data and sends it to Slack:
+
+```typescript
+// Flow Structure
+{
+  displayName: "Webhook to Slack Notification",
+  trigger: {
+    type: "WEBHOOK",
+    settings: {
+      inputSchema: [] // Accept any JSON payload
+    }
+  },
+  actions: [
+    {
+      type: "PIECE",
+      settings: {
+        pieceName: "@activepieces/piece-slack",
+        actionName: "send_message",
+        input: {
+          channel: "#notifications",
+          text: "New webhook received: {{trigger.body.message}}"
+        }
+      }
+    }
+  ]
+}
+```
+
+## Understanding Flow Versions
+
+Activepieces uses a versioning system for flows:
+
+- **Draft**: Work-in-progress version that hasn't been published
+- **Locked**: Published version that's actively running
+
+When you make changes to a published flow:
+1. A new draft version is created
+2. The locked version continues running
+3. Publishing the draft replaces the locked version
+
+This ensures your production flows aren't disrupted while you're making changes.
+
+## Next Steps
+
+Now that you've created your first flow, explore more advanced features:
+
+<CardGroup cols={2}>
+  <Card title="Add Branches & Loops" icon="code-branch" href="/workflows/building-flows">
+    Build complex logic with conditional routing
+  </Card>
+  
+  <Card title="Use Code Steps" icon="code" href="/workflows/building-flows">
+    Write custom JavaScript with npm packages
+  </Card>
+  
+  <Card title="Build AI Workflows" icon="sparkles" href="/concepts/ai-agents">
+    Create intelligent automations with AI
+  </Card>
+  
+  <Card title="Create Custom Pieces" icon="puzzle-piece" href="/pieces/introduction">
+    Build your own integrations in TypeScript
+  </Card>
+</CardGroup>
+
+## Getting Help
+
+If you run into issues:
+
+- Check the [documentation](https://activepieces.com/docs)
+- Join our [Discord community](https://discord.gg/2jUXBKDdP8)
+- Browse [example templates](https://activepieces.com/templates)
+- Review the [API reference](/api/introduction)

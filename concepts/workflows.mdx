@@ -1,0 +1,374 @@
+---
+title: 'Workflows'
+description: 'Understanding flows, triggers, and actions in Activepieces'
+---
+
+# Understanding Workflows
+
+In Activepieces, workflows are called **flows**. A flow is an automated sequence of steps that executes when triggered. Flows are the core building blocks of automation in Activepieces.
+
+## What is a Flow?
+
+A flow represents a complete automation workflow. Each flow consists of:
+
+- **One Trigger**: The event that starts the flow
+- **Multiple Actions**: Steps that execute in sequence
+- **Version Control**: Draft and locked versions for safe deployments
+- **Metadata**: Display name, owner, folder, and settings
+
+### Flow Structure
+
+Based on the Activepieces source code, here's the structure of a flow:
+
+```typescript
+interface Flow {
+  id: string;                    // Unique flow identifier
+  projectId: string;             // Project this flow belongs to
+  externalId: string;            // User-friendly identifier
+  status: FlowStatus;            // ENABLED or DISABLED
+  publishedVersionId: string;    // Current live version
+  operationStatus: FlowOperationStatus; // NONE, ENABLING, DISABLING, DELETING
+  folderId?: string;             // Optional folder organization
+  ownerId?: string;              // User who created the flow
+  timeSavedPerRun?: number;      // Estimated time saved per execution
+  templateId?: string;           // If created from a template
+}
+```
+
+### Flow Status
+
+Flows can be in one of two states:
+
+- **ENABLED**: The flow is active and will execute when triggered
+- **DISABLED**: The flow is inactive and won't execute
+
+<Note>
+  When you disable a flow, existing scheduled or queued runs will complete, but no new runs will start.
+</Note>
+
+## Triggers
+
+Triggers determine **when** a flow executes. Every flow must have exactly one trigger.
+
+### Trigger Types
+
+Activepieces supports several trigger types:
+
+#### 1. Webhook Trigger
+Receives HTTP requests from external services:
+
+```typescript
+{
+  type: "WEBHOOK",
+  settings: {
+    inputSchema: [], // Define expected fields
+  }
+}
+```
+
+**Use cases:**
+- Receive data from external APIs
+- Create custom integrations
+- Build real-time automations
+
+#### 2. Schedule Trigger
+Runs on a schedule using cron expressions:
+
+```typescript
+{
+  type: "PIECE",
+  settings: {
+    pieceName: "@activepieces/piece-schedule",
+    triggerName: "cron_trigger",
+    input: {
+      cronExpression: "0 9 * * 1-5" // Every weekday at 9 AM
+    }
+  }
+}
+```
+
+**Use cases:**
+- Daily reports
+- Periodic data syncs
+- Scheduled notifications
+- Maintenance tasks
+
+#### 3. App Event Trigger
+Triggers from specific application events:
+
+```typescript
+{
+  type: "PIECE",
+  settings: {
+    pieceName: "@activepieces/piece-gmail",
+    triggerName: "new_email",
+    input: {
+      labelId: "INBOX"
+    }
+  }
+}
+```
+
+**Examples:**
+- New email in Gmail
+- New row in Google Sheets
+- New message in Slack
+- Form submission
+- Database update
+
+#### 4. MCP Tool Trigger
+Exposes your flow as an MCP (Model Context Protocol) server tool:
+
+```typescript
+{
+  type: "PIECE",
+  settings: {
+    pieceName: "@activepieces/piece-mcp",
+    triggerName: "mcp_tool",
+    input: {
+      toolName: "search_database",
+      toolDescription: "Search the customer database",
+      inputSchema: [
+        {
+          name: "query",
+          type: "string",
+          description: "Search query"
+        }
+      ],
+      returnsResponse: true
+    }
+  }
+}
+```
+
+**Use cases:**
+- Make flows callable from Claude Desktop
+- Integrate with Cursor or Windsurf
+- Create AI-accessible tools
+
+<Info>
+  MCP triggers allow AI assistants to call your Activepieces flows as tools, enabling powerful AI-human-tool collaboration.
+</Info>
+
+## Actions
+
+Actions are the steps that execute after a trigger fires. Flows can have any number of actions, and they execute sequentially.
+
+### Action Types
+
+#### 1. Piece Action
+Use an integration from the Activepieces ecosystem:
+
+```typescript
+{
+  type: "PIECE",
+  settings: {
+    pieceName: "@activepieces/piece-slack",
+    actionName: "send_message",
+    input: {
+      channel: "#general",
+      text: "Hello from Activepieces!",
+      authentication: "{{connections.slack}}"
+    }
+  }
+}
+```
+
+#### 2. Code Action
+Write custom TypeScript/JavaScript with npm support:
+
+```typescript
+{
+  type: "CODE",
+  settings: {
+    sourceCode: {
+      code: `
+        export async function code(inputs) {
+          const { data } = inputs;
+          // Transform the data
+          return {
+            transformed: data.map(item => item.toUpperCase())
+          };
+        }
+      `,
+      packages: {} // Add npm packages here
+    },
+    input: {
+      data: "{{trigger.body}}"
+    }
+  }
+}
+```
+
+#### 3. Loop Action
+Iterate over arrays:
+
+```typescript
+{
+  type: "LOOP",
+  settings: {
+    items: "{{trigger.body.customers}}",
+    loopActions: [
+      // Actions to run for each item
+    ]
+  }
+}
+```
+
+#### 4. Branch Action
+Conditional logic (if/else):
+
+```typescript
+{
+  type: "BRANCH",
+  settings: {
+    conditions: [
+      [{
+        firstValue: "{{trigger.body.status}}",
+        operator: "EQUALS",
+        secondValue: "urgent"
+      }]
+    ],
+    trueActions: [
+      // Execute if condition is true
+    ],
+    falseActions: [
+      // Execute if condition is false
+    ]
+  }
+}
+```
+
+#### 5. HTTP Request
+Make API calls to any service:
+
+```typescript
+{
+  type: "PIECE",
+  settings: {
+    pieceName: "@activepieces/piece-http",
+    actionName: "send_request",
+    input: {
+      method: "POST",
+      url: "https://api.example.com/data",
+      headers: {
+        "Authorization": "Bearer {{connections.api_key}}"
+      },
+      body: {
+        data: "{{trigger.body}}"
+      }
+    }
+  }
+}
+```
+
+## Flow Versions
+
+Activepieces maintains versions of your flows to ensure safe deployments:
+
+```typescript
+interface FlowVersion {
+  id: string;
+  flowId: string;
+  displayName: string;
+  trigger: FlowTrigger;          // The trigger configuration
+  state: FlowVersionState;       // DRAFT or LOCKED
+  valid: boolean;                // Whether the flow is valid
+  schemaVersion: string;         // Flow schema version
+  updatedBy?: string;            // Last user who modified
+  connectionIds: string[];       // Connected integrations
+  agentIds: string[];            // Associated AI agents
+  notes: Note[];                 // Comments and annotations
+}
+
+enum FlowVersionState {
+  DRAFT = "DRAFT",     // Work in progress
+  LOCKED = "LOCKED"    // Published and running
+}
+```
+
+### Version Workflow
+
+1. **Create/Edit Flow**: Start with a draft version
+2. **Test**: Run test executions without publishing
+3. **Publish**: Lock the version and make it live
+4. **Edit Again**: Creates a new draft while the locked version keeps running
+5. **Publish Update**: Replace the locked version with the new draft
+
+<Note>
+  This versioning system ensures your production flows continue running while you make and test changes.
+</Note>
+
+## Referencing Data Between Steps
+
+Activepieces uses a template syntax to reference data from previous steps:
+
+```typescript
+// Reference trigger data
+{{trigger.body.email}}
+
+// Reference previous step output
+{{step_1.output.id}}
+
+// Reference connections
+{{connections.slack_auth}}
+
+// Use in code steps
+export async function code(inputs) {
+  const email = inputs.email; // From {{trigger.body.email}}
+  return { processed: email };
+}
+```
+
+## Flow Execution
+
+When a flow runs:
+
+1. **Trigger fires**: Event occurs (webhook received, schedule hits, etc.)
+2. **Steps execute sequentially**: Each action runs in order
+3. **Data flows forward**: Each step can access outputs from previous steps
+4. **Execution completes**: Final status is SUCCESS or FAILED
+
+### Execution State
+
+The platform maintains execution state including:
+- Current step being executed
+- Input and output of each step
+- Error messages if steps fail
+- Total execution time
+- Webhook handshake configuration
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Descriptive Names" icon="tag">
+    Use clear, descriptive names for flows and steps so teammates understand what they do.
+  </Card>
+  
+  <Card title="Test Before Publishing" icon="flask">
+    Always test flows thoroughly before enabling them in production.
+  </Card>
+  
+  <Card title="Use Folders" icon="folder">
+    Organize related flows in folders for easier management.
+  </Card>
+  
+  <Card title="Add Error Handling" icon="shield">
+    Use branches to handle errors gracefully and send notifications when issues occur.
+  </Card>
+  
+  <Card title="Document with Notes" icon="note">
+    Add notes to complex steps to help future maintainers.
+  </Card>
+  
+  <Card title="Monitor Executions" icon="chart-line">
+    Regularly check execution logs to catch and fix issues early.
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+- [Learn about Pieces](/concepts/pieces) - Understand the integration framework
+- [Build with AI](/concepts/ai-agents) - Create intelligent workflows
+- [MCP Integration](/concepts/mcp-servers) - Connect flows to AI assistants
+- [Advanced Flow Building](/workflows/building-flows) - Master complex patterns

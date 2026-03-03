@@ -1,0 +1,158 @@
+---
+title: 'API Introduction'
+description: 'Learn about the Activepieces REST API for building automations programmatically'
+icon: 'rocket'
+---
+
+## Overview
+
+The Activepieces REST API enables you to programmatically manage flows, run automations, handle connections, and manage projects. Built with Fastify, the API provides a fast and reliable interface for integrating Activepieces into your applications.
+
+## Base URL
+
+The API base URL depends on your deployment:
+
+<CodeGroup>
+```bash Self-Hosted
+https://your-domain.com/api/v1
+```
+
+```bash Cloud
+https://cloud.activepieces.com/api/v1
+```
+</CodeGroup>
+
+All API endpoints are prefixed with `/api/v1` and use HTTPS.
+
+## API Versioning
+
+Activepieces uses URL-based versioning for the API:
+
+- Current version: **v1**
+- All endpoints are accessed via `/api/v1/`
+- Breaking changes will result in a new version (e.g., v2)
+
+## Rate Limits
+
+API rate limiting is configurable for authentication endpoints to prevent abuse:
+
+### Authentication Endpoints
+
+- **Enabled by default**: Rate limiting on sign-in/sign-up endpoints
+- **Configurable limits**: Set via environment variables
+  - `AP_API_RATE_LIMIT_AUTHN_ENABLED` - Enable/disable rate limiting (default: true)
+  - `AP_API_RATE_LIMIT_AUTHN_MAX` - Maximum requests per window
+  - `AP_API_RATE_LIMIT_AUTHN_WINDOW` - Time window for rate limiting
+
+Rate limits are applied per IP address using the client's real IP from the configured header.
+
+### Rate Limit Headers
+
+When rate limiting is enabled, responses include:
+
+- `X-RateLimit-Limit` - Maximum requests allowed
+- `X-RateLimit-Remaining` - Remaining requests in window
+- `X-RateLimit-Reset` - Time when the limit resets
+
+### Handling Rate Limits
+
+If you exceed the rate limit, you'll receive a `429 Too Many Requests` response:
+
+```json
+{
+  "statusCode": 429,
+  "error": "Too Many Requests",
+  "message": "Rate limit exceeded, retry in 1 minute"
+}
+```
+
+<Tip>
+For production environments, consider implementing exponential backoff when receiving 429 responses.
+</Tip>
+
+## Response Format
+
+All API responses follow a consistent JSON format:
+
+### Success Response
+
+```json
+{
+  "id": "flow_123",
+  "displayName": "My Flow",
+  "status": "ENABLED",
+  "created": "2024-01-01T00:00:00.000Z",
+  "updated": "2024-01-01T00:00:00.000Z"
+}
+```
+
+### Error Response
+
+```json
+{
+  "statusCode": 400,
+  "code": "VALIDATION",
+  "params": {
+    "message": "Invalid request parameters"
+  }
+}
+```
+
+## Pagination
+
+List endpoints use cursor-based pagination:
+
+```json
+{
+  "data": [...],
+  "next": "eyJpZCI6IjEyMyJ9",
+  "previous": null
+}
+```
+
+**Parameters:**
+- `limit` - Number of items to return (default: 10-50 depending on endpoint)
+- `cursor` - Cursor from previous response for pagination
+
+## Common HTTP Status Codes
+
+| Status Code | Description |
+|------------|-------------|
+| 200 | Success - Request completed successfully |
+| 201 | Created - Resource created successfully |
+| 204 | No Content - Request succeeded with no response body |
+| 400 | Bad Request - Invalid request parameters |
+| 401 | Unauthorized - Missing or invalid authentication |
+| 403 | Forbidden - Insufficient permissions |
+| 404 | Not Found - Resource not found |
+| 429 | Too Many Requests - Rate limit exceeded |
+| 500 | Internal Server Error - Server error occurred |
+
+## CORS Support
+
+The API supports Cross-Origin Resource Sharing (CORS):
+
+- **Origin**: `*` (all origins allowed)
+- **Methods**: All HTTP methods supported
+- **Exposed Headers**: All headers exposed
+
+<Note>
+For production deployments, consider configuring CORS to restrict origins to your specific domains.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="key" href="/api/authentication">
+    Learn how to authenticate API requests
+  </Card>
+  <Card title="Flows API" icon="diagram-project" href="/api/flows">
+    Create and manage automation flows
+  </Card>
+  <Card title="Flow Runs API" icon="play" href="/api/flow-runs">
+    Trigger and monitor flow executions
+  </Card>
+  <Card title="Connections API" icon="link" href="/api/connections">
+    Manage app connections and OAuth
+  </Card>
+</CardGroup>

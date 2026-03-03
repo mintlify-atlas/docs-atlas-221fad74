@@ -1,0 +1,677 @@
+---
+title: Debugging Workflows
+description: Debug workflows by viewing run logs, analyzing step execution, and troubleshooting common issues
+icon: 'bug'
+---
+
+When workflows don't behave as expected, Activepieces provides comprehensive debugging tools to help you identify and fix issues quickly.
+
+## Understanding Flow Runs
+
+Every time a workflow executes, it creates a flow run:
+
+```typescript
+// From packages/shared/src/lib/automation/flow-run/flow-run.ts
+export type FlowRun = {
+  id: string,
+  projectId: string,
+  flowId: string,
+  flowVersionId: string,
+  status: FlowRunStatus,
+  logsFileId: string | null,
+  startTime: string,
+  finishTime: string,
+  environment: RunEnvironment,  // PRODUCTION or TESTING
+  steps: Record<string, StepOutput> | null,  // All step results
+  failedStep?: {
+    name: string,
+    displayName: string,
+    message: string
+  },
+  stepsCount: number
+}
+```
+
+### Run Status
+
+```typescript
+export enum FlowRunStatus {
+  RUNNING = 'RUNNING',      // Currently executing
+  SUCCEEDED = 'SUCCEEDED',  // Completed successfully
+  FAILED = 'FAILED',        // Failed on a step
+  PAUSED = 'PAUSED',        // Waiting for input
+  STOPPED = 'STOPPED'       // Manually stopped
+}
+```
+
+<CardGroup cols={3}>
+  <Card title="Running" icon="circle-play">
+    Flow is currently executing steps.
+  </Card>
+  <Card title="Succeeded" icon="circle-check">
+    All steps completed successfully.
+  </Card>
+  <Card title="Failed" icon="circle-xmark">
+    A step failed, execution stopped.
+  </Card>
+</CardGroup>
+
+## Viewing Flow Runs
+
+<Steps>
+  <Step title="Access Run History">
+    Navigate to the **Runs** tab in your flow or project.
+  </Step>
+
+  <Step title="Filter Runs">
+    Filter by:
+    - **Status**: Failed, Succeeded, Running
+    - **Flow**: Specific workflow
+    - **Date Range**: Time period
+    
+    ```typescript
+    // From packages/server/api/src/app/flows/flow-run/flow-run-service.ts
+    async list(params: {
+      projectId: string,
+      flowId?: string[],
+      status?: FlowRunStatus[],
+      cursor?: string,
+      limit: number
+    }): Promise<SeekPage<FlowRun>> {
+      // Filter and paginate runs
+    }
+    ```
+  </Step>
+
+  <Step title="Select a Run">
+    Click on any run to view detailed execution information.
+  </Step>
+</Steps>
+
+## Analyzing Step Execution
+
+### Step Output Structure
+
+Each step in a run has detailed output:
+
+```typescript
+{
+  "trigger": {
+    "status": "SUCCEEDED",
+    "output": {
+      "body": { /* webhook payload */ },
+      "headers": { /* request headers */ }
+    },
+    "input": {},
+    "duration": 5  // milliseconds
+  },
+  "send_email": {
+    "status": "SUCCEEDED",
+    "output": {
+      "messageId": "abc123",
+      "response": "Email sent successfully"
+    },
+    "input": {
+      "to": "user@example.com",
+      "subject": "Hello",
+      "body": "Welcome!"
+    },
+    "duration": 1250
+  },
+  "api_call": {
+    "status": "FAILED",
+    "errorMessage": "Request failed with status 404",
+    "input": {
+      "url": "https://api.example.com/user/123",
+      "method": "GET"
+    },
+    "duration": 500
+  }
+}
+```
+
+<Tabs>
+  <Tab title="View Input">
+    See exactly what data was passed to the step:
+
+    ```json
+    {
+      "input": {
+        "to": "user@example.com",
+        "subject": "Order Confirmation",
+        "body": "Thank you for your order #12345"
+      }
+    }
+    ```
+
+    <Note>
+    Input values show variable substitutions after evaluation.
+    </Note>
+  </Tab>
+
+  <Tab title="View Output">
+    See the data produced by the step:
+
+    ```json
+    {
+      "output": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "orderId": "12345",
+          "total": 99.99
+        },
+        "headers": {
+          "content-type": "application/json"
+        }
+      }
+    }
+    ```
+
+    This is the data available to subsequent steps.
+  </Tab>
+
+  <Tab title="View Errors">
+    If a step failed, see the error details:
+
+    ```json
+    {
+      "status": "FAILED",
+      "errorMessage": "Request failed with status 404: Route not found",
+      "response": {
+        "status": 404,
+        "body": {
+          "error": "Not Found",
+          "message": "User not found"
+        }
+      }
+    }
+    ```
+  </Tab>
+
+  <Tab title="View Duration">
+    See how long each step took:
+
+    ```json
+    {
+      "duration": 1250  // milliseconds
+    }
+    ```
+
+    Useful for identifying slow steps.
+  </Tab>
+</Tabs>
+
+## Viewing Execution Logs
+
+Detailed logs are available for each run:
+
+```typescript
+// From packages/server/api/src/app/flows/flow-run/logs/flow-run-logs-service.ts
+const flowRunLogsService = {
+  async getLogs(request: {
+    logsFileId: string,
+    projectId: string
+  }): Promise<ExecutioOutputFile | null> {
+    const file = await fileService.getDataOrUndefined({
+      fileId: request.logsFileId,
+      projectId: request.projectId
+    });
+    
+    if (isNil(file)) return null;
+    
+    return JSON.parse(file.data.toString('utf-8'));
+  }
+}
+```
+
+### Log Levels
+
+Logs include:
+- **Info**: General execution information
+- **Debug**: Detailed variable values
+- **Warning**: Non-critical issues
+- **Error**: Failures and exceptions
+
+<Note>
+Logs are stored for the retention period configured in your plan (default: 14 days).
+</Note>
+
+## Common Issues and Solutions
+
+<AccordionGroup>
+  <Accordion title="Step Shows No Output">
+    **Symptoms:**
+    - Step executed but output is empty or null
+    - Subsequent steps can't access data
+
+    **Common Causes:**
+    1. Step succeeded but returned no data
+    2. API returned empty response
+    3. Data filtering removed all items
+
+    **Solutions:**
+    - Check step configuration
+    - Verify API endpoint is correct
+    - Review filter conditions
+    - Add default values: `{{ step.data ?? {} }}`
+  </Accordion>
+
+  <Accordion title="Variable Reference Errors">
+    **Symptoms:**
+    - Error: "Cannot read property 'x' of undefined"
+    - Step fails with "Invalid reference"
+
+    **Common Causes:**
+    1. Referenced step hasn't executed yet
+    2. Property path is incorrect
+    3. Previous step failed (with continueOnFailure)
+
+    **Solutions:**
+    ```typescript
+    // Use safe navigation
+    {{ trigger?.user?.email || 'default@example.com' }}
+    
+    // Check step status first
+    {{ api_call.status === 'SUCCEEDED' ? api_call.body : {} }}
+    
+    // Use null coalescing
+    {{ step.data ?? defaultValue }}
+    ```
+  </Accordion>
+
+  <Accordion title="Timeout Errors">
+    **Symptoms:**
+    - Step fails with timeout error
+    - Long-running operations don't complete
+
+    **Common Causes:**
+    1. External API is slow
+    2. Large data processing
+    3. Network issues
+
+    **Solutions:**
+    - Enable retry on failure
+    - Optimize data queries
+    - Break into smaller chunks
+    - Use webhook responses for async operations
+  </Accordion>
+
+  <Accordion title="Authentication Failures">
+    **Symptoms:**
+    - 401 or 403 errors
+    - "Invalid credentials" messages
+
+    **Common Causes:**
+    1. Connection expired or revoked
+    2. Insufficient permissions
+    3. API key incorrect
+
+    **Solutions:**
+    - Refresh connection authentication
+    - Verify API permissions
+    - Check connection configuration
+    - Test connection separately
+  </Accordion>
+
+  <Accordion title="Data Type Mismatches">
+    **Symptoms:**
+    - Type error: "Expected string, got object"
+    - JSON parsing errors
+
+    **Common Causes:**
+    1. Passing object where string expected
+    2. String where array expected
+    3. Missing JSON.stringify/parse
+
+    **Solutions:**
+    ```typescript
+    // Convert to string
+    {{ JSON.stringify(trigger.data) }}
+    
+    // Parse JSON string
+    {{ JSON.parse(trigger.jsonString) }}
+    
+    // Extract specific field
+    {{ trigger.user.id.toString() }}
+    ```
+  </Accordion>
+
+  <Accordion title="Loop Doesn't Execute">
+    **Symptoms:**
+    - Loop step shows as succeeded but no iterations
+    - Loop output is empty
+
+    **Common Causes:**
+    1. Items array is empty
+    2. Items reference is incorrect
+    3. Loop is skipped
+
+    **Solutions:**
+    ```typescript
+    // Check items before loop
+    Items: {{ trigger.items.length }} items
+    
+    // Verify array reference
+    {{ trigger.data.results }}  // not {{ trigger.data }}
+    
+    // Add default empty array
+    {{ trigger.items ?? [] }}
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Step-by-Step Debugging
+
+<Steps>
+  <Step title="Identify Failed Step">
+    Look for the first failed step in the run:
+
+    ```typescript
+    {
+      "failedStep": {
+        "name": "send_http",
+        "displayName": "Call API",
+        "message": "Request failed with status 404"
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Review Step Input">
+    Check what data was sent to the step:
+
+    - Are variable references correct?
+    - Is data in expected format?
+    - Are required fields present?
+  </Step>
+
+  <Step title="Check Error Message">
+    Read the error message carefully:
+
+    ```typescript
+    "errorMessage": "Request failed with status 404: Route not found"
+    ```
+
+    This tells you:
+    - Type of error (404 = Not Found)
+    - What failed (Route not found)
+  </Step>
+
+  <Step title="Verify Previous Steps">
+    Check steps before the failed one:
+
+    - Did they execute successfully?
+    - Is their output what you expected?
+    - Is data being passed correctly?
+  </Step>
+
+  <Step title="Test in Isolation">
+    Test the failed step independently:
+
+    1. Go to flow builder
+    2. Configure step with sample data
+    3. Test step alone
+    4. Verify it works
+  </Step>
+
+  <Step title="Fix and Retry">
+    Once you identify the issue:
+
+    1. Update the flow in builder
+    2. Publish changes
+    3. Retry the failed run
+
+    ```typescript
+    // From packages/web/src/app/builder/run-list/flow-run-card.tsx
+    const { mutate: retryRun } = useMutation({
+      mutationFn: async ({ run, retryStrategy }) => {
+        return await flowRunsApi.retry(run.id, {
+          projectId,
+          strategy: retryStrategy  // ON_LATEST_VERSION or FROM_FAILED_STEP
+        });
+      }
+    });
+    ```
+  </Step>
+</Steps>
+
+## Retry Strategies
+
+```typescript
+// From packages/shared/src/lib/automation/flow-run/flow-run.ts
+export enum FlowRetryStrategy {
+  ON_LATEST_VERSION = 'ON_LATEST_VERSION',      // Retry with latest flow version
+  FROM_FAILED_STEP = 'FROM_FAILED_STEP'         // Resume from failed step
+}
+```
+
+<Tabs>
+  <Tab title="Retry on Latest Version">
+    Re-run the entire flow with the latest published version:
+
+    **Use when:**
+    - You fixed the issue in the flow
+    - Flow structure changed
+    - Need complete re-execution
+
+    **Behavior:**
+    - Starts from trigger
+    - Uses latest flow version
+    - Creates new run with same input
+  </Tab>
+
+  <Tab title="Retry from Failed Step">
+    Resume execution from the failed step:
+
+    **Use when:**
+    - Issue was temporary (API downtime)
+    - No flow changes needed
+    - Want to save time/API calls
+
+    **Behavior:**
+    - Keeps results of successful steps
+    - Re-executes from failed step
+    - Uses same flow version
+  </Tab>
+</Tabs>
+
+## Testing Best Practices
+
+<AccordionGroup>
+  <Accordion title="Test with Real Data">
+    Use realistic test data that matches production:
+
+    ```typescript
+    // Good test data
+    {
+      "user": {
+        "id": 123,
+        "email": "test@example.com",
+        "name": "Test User",
+        "active": true
+      }
+    }
+
+    // Poor test data
+    {
+      "user": "test"
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Test Edge Cases">
+    Test with:
+    - Empty arrays: `[]`
+    - Null values: `null`
+    - Missing fields
+    - Very large datasets
+    - Special characters in strings
+  </Accordion>
+
+  <Accordion title="Test Error Scenarios">
+    Deliberately cause errors to verify handling:
+    - Invalid API keys
+    - Wrong URLs
+    - Malformed data
+    - Network timeouts
+  </Accordion>
+
+  <Accordion title="Monitor Production Runs">
+    Regularly check production runs:
+    - Review failure rate
+    - Identify patterns
+    - Set up error notifications
+    - Track performance metrics
+  </Accordion>
+</AccordionGroup>
+
+## Performance Debugging
+
+### Identify Slow Steps
+
+Check step duration in run details:
+
+```typescript
+{
+  "fetch_data": {
+    "duration": 45000,  // 45 seconds - slow!
+    "status": "SUCCEEDED"
+  },
+  "transform_data": {
+    "duration": 150,    // 0.15 seconds - fast
+    "status": "SUCCEEDED"
+  }
+}
+```
+
+### Optimization Tips
+
+1. **Reduce API Calls**: Batch requests when possible
+2. **Filter Early**: Remove unnecessary data before loops
+3. **Parallel Processing**: Use multiple flows for independent tasks
+4. **Optimize Loops**: Process only what's needed
+5. **Cache Results**: Store frequently accessed data
+
+## Debugging Tools
+
+### Console Logging in Code Actions
+
+```typescript
+export const code = async (inputs) => {
+  console.log('Input data:', inputs);
+  
+  try {
+    const result = processData(inputs.data);
+    console.log('Processed result:', result);
+    return result;
+  } catch (error) {
+    console.error('Processing failed:', error);
+    throw error;
+  }
+};
+```
+
+<Note>
+Console logs appear in the execution logs for the run.
+</Note>
+
+### Add Debug Steps
+
+Insert temporary code actions to inspect data:
+
+```typescript
+{
+  "name": "debug_data",
+  "type": "CODE",
+  "settings": {
+    "sourceCode": {
+      "code": `
+export const code = async (inputs) => {
+  return {
+    stepOutput: inputs.previousStep,
+    typeOf: typeof inputs.previousStep,
+    keys: Object.keys(inputs.previousStep || {}),
+    values: Object.values(inputs.previousStep || {})
+  };
+};
+      `
+    },
+    "input": {
+      "previousStep": "{{ some_step.output }}"
+    }
+  }
+}
+```
+
+## Run Environments
+
+```typescript
+export enum RunEnvironment {
+  PRODUCTION = 'PRODUCTION',  // Real triggers, production data
+  TESTING = 'TESTING'         // Manual tests, sample data
+}
+```
+
+<Tabs>
+  <Tab title="Testing Environment">
+    **Characteristics:**
+    - Triggered manually
+    - Uses sample data
+    - Doesn't affect production
+    - Free (doesn't count toward limits)
+
+    **Use for:**
+    - Developing new flows
+    - Testing changes
+    - Debugging issues
+    - Training and demos
+  </Tab>
+
+  <Tab title="Production Environment">
+    **Characteristics:**
+    - Triggered by real events
+    - Uses actual data
+    - Affects production systems
+    - Counted in usage metrics
+
+    **Monitor for:**
+    - Failures and errors
+    - Performance issues
+    - Success rates
+    - Resource usage
+  </Tab>
+</Tabs>
+
+## Getting Help
+
+If you're stuck:
+
+1. **Check Documentation**: Search for your error message
+2. **Community Forum**: Ask the community
+3. **Support**: Contact support with:
+   - Flow ID
+   - Run ID
+   - Error message
+   - Steps to reproduce
+
+<Warning>
+When sharing debugging info, redact sensitive data like API keys, passwords, or personal information.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Error Handling" icon="shield" href="/workflows/error-handling">
+    Configure proper error handling
+  </Card>
+  <Card title="Testing" icon="vial" href="/workflows/publishing">
+    Best practices for testing
+  </Card>
+  <Card title="Monitoring" icon="chart-line" href="/workflows/publishing">
+    Monitor workflow health
+  </Card>
+  <Card title="Performance" icon="gauge" href="/workflows/building-flows">
+    Optimize workflow performance
+  </Card>
+</CardGroup>

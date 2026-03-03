@@ -1,0 +1,644 @@
+---
+title: 'AI Agents'
+description: 'Build intelligent workflows with AI-powered automation in Activepieces'
+---
+
+# AI Agents in Activepieces
+
+Activepieces is **AI-first**, providing native AI capabilities that let you build intelligent workflows capable of reasoning, decision-making, and multi-step task execution. With support for multiple AI providers and a powerful agent framework, you can create automations that go far beyond simple if-then logic.
+
+## What are AI Agents?
+
+AI agents in Activepieces are intelligent automation components that can:
+
+- **Reason through problems**: Analyze situations and determine the best course of action
+- **Use tools**: Call other Activepieces actions, APIs, and MCP servers to accomplish tasks
+- **Iterate until complete**: Keep working on a task until it's successfully done
+- **Extract structured data**: Parse unstructured text into organized information
+- **Make decisions**: Choose different workflow paths based on AI analysis
+- **Generate content**: Create text, images, and other media
+
+<Info>
+  AI agents can handle complex, multi-step tasks that would traditionally require extensive programming and conditional logic.
+</Info>
+
+## AI Piece
+
+Activepieces includes a powerful **AI** piece with multiple actions:
+
+### Text Actions
+
+#### Ask AI
+Generate text using AI models:
+
+```typescript
+{
+  type: 'PIECE',
+  settings: {
+    pieceName: '@activepieces/piece-ai',
+    actionName: 'ask_ai',
+    input: {
+      prompt: 'Summarize this customer feedback: {{trigger.body.feedback}}',
+      aiProvider: {
+        provider: AIProviderName.OPENAI,
+        model: 'gpt-4',
+        apiKey: '{{connections.openai}}'
+      },
+      temperature: 0.7,
+      maxTokens: 500
+    }
+  }
+}
+```
+
+**Use cases:**
+- Summarize documents
+- Generate emails and messages
+- Create product descriptions
+- Answer questions
+- Translate text
+
+#### Summarize Text
+Condense long content:
+
+```typescript
+{
+  actionName: 'summarize_text',
+  input: {
+    text: '{{steps.fetch_article.output.content}}',
+    maxLength: 200,
+    aiProvider: { /* provider config */ }
+  }
+}
+```
+
+### Image Generation
+
+Generate images from text descriptions:
+
+```typescript
+{
+  actionName: 'generate_image',
+  input: {
+    prompt: 'A modern logo for a tech startup',
+    aiProvider: {
+      provider: AIProviderName.OPENAI,
+      model: 'dall-e-3',
+      apiKey: '{{connections.openai}}'
+    },
+    size: '1024x1024',
+    quality: 'high'
+  }
+}
+```
+
+**Use cases:**
+- Generate social media images
+- Create product mockups
+- Design marketing materials
+- Visualize concepts
+
+### Utility Actions
+
+#### Classify Text
+Categorize text using AI:
+
+```typescript
+{
+  actionName: 'classify_text',
+  input: {
+    text: '{{trigger.body.message}}',
+    categories: ['urgent', 'normal', 'low-priority'],
+    aiProvider: { /* provider config */ }
+  }
+}
+```
+
+**Use cases:**
+- Triage support tickets
+- Categorize emails
+- Route messages to teams
+- Content moderation
+
+#### Extract Structured Data
+Parse unstructured text into structured JSON:
+
+```typescript
+{
+  actionName: 'extract_structured_data',
+  input: {
+    text: '{{trigger.body.email}}',
+    schema: {
+      name: 'string',
+      email: 'string',
+      company: 'string',
+      requestType: 'string',
+      urgency: 'string'
+    },
+    aiProvider: { /* provider config */ }
+  }
+}
+```
+
+**Output:**
+```json
+{
+  "name": "John Smith",
+  "email": "john@example.com",
+  "company": "Acme Corp",
+  "requestType": "technical_support",
+  "urgency": "high"
+}
+```
+
+**Use cases:**
+- Extract data from emails
+- Parse invoices and receipts
+- Process form submissions
+- Structure customer feedback
+
+### Agent Actions
+
+#### Run Agent
+The most powerful AI action - agents that can use tools and reason through complex tasks:
+
+```typescript
+{
+  actionName: 'run_agent',
+  input: {
+    prompt: 'Find all customers who haven\'t been contacted in 30 days and send them a personalized re-engagement email',
+    aiProviderModel: {
+      provider: AIProviderName.ANTHROPIC,
+      model: 'claude-3-5-sonnet-20241022',
+      apiKey: '{{connections.anthropic}}'
+    },
+    agentTools: [
+      {
+        type: 'PIECE',
+        toolName: 'search_database',
+        pieceMetadata: {
+          pieceName: '@activepieces/piece-postgres',
+          actionName: 'execute_query'
+        }
+      },
+      {
+        type: 'PIECE',
+        toolName: 'send_email',
+        pieceMetadata: {
+          pieceName: '@activepieces/piece-sendgrid',
+          actionName: 'send_email'
+        }
+      },
+      {
+        type: 'FLOW',
+        toolName: 'generate_email_content',
+        externalFlowId: 'email-generator-flow'
+      },
+      {
+        type: 'MCP',
+        toolName: 'analyze_customer',
+        serverUrl: 'https://mcp.example.com',
+        protocol: 'sse'
+      }
+    ],
+    structuredOutput: [
+      {
+        displayName: 'Customers Contacted',
+        type: 'number'
+      },
+      {
+        displayName: 'Emails Sent',
+        type: 'number'
+      },
+      {
+        displayName: 'Errors',
+        type: 'array'
+      }
+    ]
+  }
+}
+```
+
+The agent will:
+1. Understand the task from the prompt
+2. Decide which tools to use and in what order
+3. Query the database for inactive customers
+4. Generate personalized email content for each
+5. Send the emails
+6. Return structured results
+
+## AI Providers
+
+Activepieces supports multiple AI providers through the Vercel AI SDK:
+
+### Supported Providers
+
+Based on the source code, Activepieces integrates with:
+
+- **OpenAI**: GPT-4, GPT-4 Turbo, GPT-3.5, DALL-E
+- **Anthropic**: Claude 3.5 Sonnet, Claude 3 Opus, Claude 3 Haiku
+- **Google**: Gemini Pro, Gemini Pro Vision
+- **Google Vertex AI**: Vertex Gemini models
+- **Azure OpenAI**: Azure-hosted OpenAI models
+- **Replicate**: Open source models
+- **OpenRouter**: Access to multiple providers
+- **Custom OpenAI-compatible**: Any OpenAI-compatible API
+
+### Provider Configuration
+
+```typescript
+// OpenAI
+{
+  provider: AIProviderName.OPENAI,
+  model: 'gpt-4-turbo',
+  apiKey: '{{connections.openai_key}}',
+  baseURL?: 'https://api.openai.com/v1' // Optional
+}
+
+// Anthropic
+{
+  provider: AIProviderName.ANTHROPIC,
+  model: 'claude-3-5-sonnet-20241022',
+  apiKey: '{{connections.anthropic_key}}'
+}
+
+// Google
+{
+  provider: AIProviderName.GOOGLE,
+  model: 'gemini-pro',
+  apiKey: '{{connections.google_ai_key}}'
+}
+
+// Azure OpenAI
+{
+  provider: AIProviderName.AZURE,
+  model: 'gpt-4',
+  apiKey: '{{connections.azure_key}}',
+  resourceName: 'my-azure-resource',
+  deployment: 'gpt-4-deployment'
+}
+
+// Custom OpenAI-compatible
+{
+  provider: AIProviderName.OPENAI_COMPATIBLE,
+  model: 'llama-3-70b',
+  apiKey: '{{connections.custom_api_key}}',
+  baseURL: 'https://api.custom-llm.com/v1'
+}
+```
+
+## Agent Tools
+
+Agents can use various types of tools to accomplish tasks:
+
+### Piece Tools
+Call any Activepieces piece action:
+
+```typescript
+{
+  type: 'PIECE',
+  toolName: 'search_customers',
+  pieceMetadata: {
+    pieceName: '@activepieces/piece-postgres',
+    actionName: 'execute_query',
+    packageType: 'REGISTRY',
+    pieceVersion: '0.25.6',
+    actionDisplayName: 'Execute Query'
+  }
+}
+```
+
+### Flow Tools
+Execute another flow as a tool:
+
+```typescript
+{
+  type: 'FLOW',
+  toolName: 'process_order',
+  externalFlowId: 'order-processing-flow-123'
+}
+```
+
+### MCP Tools
+Call external MCP servers:
+
+```typescript
+{
+  type: 'MCP',
+  toolName: 'external_service',
+  serverUrl: 'https://mcp.external-service.com',
+  protocol: 'sse',
+  auth: {
+    type: 'bearer',
+    token: '{{connections.external_token}}'
+  }
+}
+```
+
+## Building AI Workflows
+
+### Example 1: Intelligent Customer Support
+
+```typescript
+// Flow: "AI Customer Support Agent"
+{
+  trigger: {
+    type: 'WEBHOOK',
+    settings: { /* webhook config */ }
+  },
+  actions: [
+    // Step 1: Classify the support request
+    {
+      name: 'classify_request',
+      actionName: 'classify_text',
+      input: {
+        text: '{{trigger.body.message}}',
+        categories: ['bug_report', 'feature_request', 'billing', 'technical_support', 'general_inquiry']
+      }
+    },
+    // Step 2: Extract structured information
+    {
+      name: 'extract_info',
+      actionName: 'extract_structured_data',
+      input: {
+        text: '{{trigger.body.message}}',
+        schema: {
+          customerName: 'string',
+          issueDescription: 'string',
+          affectedFeature: 'string',
+          urgency: 'string'
+        }
+      }
+    },
+    // Step 3: Run agent to handle the request
+    {
+      name: 'handle_request',
+      actionName: 'run_agent',
+      input: {
+        prompt: `Handle this {{steps.classify_request.output.category}} request:
+                Customer: {{steps.extract_info.output.customerName}}
+                Issue: {{steps.extract_info.output.issueDescription}}
+                
+                Search our knowledge base, create a ticket if needed, and draft a response.`,
+        agentTools: [
+          // Tool to search knowledge base
+          {
+            type: 'FLOW',
+            toolName: 'search_knowledge_base',
+            externalFlowId: 'kb-search-flow'
+          },
+          // Tool to create ticket
+          {
+            type: 'PIECE',
+            toolName: 'create_ticket',
+            pieceMetadata: {
+              pieceName: '@activepieces/piece-zendesk',
+              actionName: 'create_ticket'
+            }
+          }
+        ]
+      }
+    },
+    // Step 4: Send response
+    {
+      name: 'send_response',
+      actionName: 'send_email',
+      input: {
+        to: '{{trigger.body.email}}',
+        subject: 'Re: Your Support Request',
+        body: '{{steps.handle_request.output.response}}'
+      }
+    }
+  ]
+}
+```
+
+### Example 2: Content Generation Pipeline
+
+```typescript
+// Flow: "AI Content Generator"
+{
+  trigger: {
+    type: 'SCHEDULE',
+    settings: {
+      cronExpression: '0 9 * * 1' // Every Monday at 9 AM
+    }
+  },
+  actions: [
+    // Step 1: Agent researches topic
+    {
+      name: 'research_topic',
+      actionName: 'run_agent',
+      input: {
+        prompt: 'Research the latest trends in {{workflow.topic}} and identify 3 interesting angles for blog posts',
+        agentTools: [
+          {
+            type: 'PIECE',
+            toolName: 'web_search',
+            pieceMetadata: {
+              pieceName: '@activepieces/piece-google',
+              actionName: 'search'
+            }
+          }
+        ],
+        structuredOutput: [
+          {
+            displayName: 'Topics',
+            type: 'array'
+          }
+        ]
+      }
+    },
+    // Step 2: Generate content for each topic
+    {
+      name: 'generate_posts',
+      type: 'LOOP',
+      settings: {
+        items: '{{steps.research_topic.output.topics}}',
+        loopActions: [
+          {
+            actionName: 'ask_ai',
+            input: {
+              prompt: 'Write a 500-word blog post about: {{loop.item}}',
+              temperature: 0.8
+            }
+          },
+          {
+            actionName: 'generate_image',
+            input: {
+              prompt: 'Featured image for blog post: {{loop.item}}'
+            }
+          }
+        ]
+      }
+    },
+    // Step 3: Publish to CMS
+    {
+      name: 'publish',
+      type: 'LOOP',
+      settings: {
+        items: '{{steps.generate_posts.output}}',
+        loopActions: [
+          {
+            pieceName: '@activepieces/piece-wordpress',
+            actionName: 'create_post',
+            input: {
+              title: '{{loop.item.title}}',
+              content: '{{loop.item.content}}',
+              featuredImage: '{{loop.item.image}}'
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
+```
+
+## AI SDK Integration
+
+Activepieces uses the Vercel AI SDK (`ai` package) for AI operations:
+
+```typescript
+import { streamText, generateText } from 'ai';
+import { createAIModel } from './common/ai-sdk';
+
+// Create AI model from provider config
+const model = createAIModel({
+  provider: AIProviderName.ANTHROPIC,
+  model: 'claude-3-5-sonnet-20241022',
+  apiKey: apiKey
+});
+
+// Generate text
+const result = await generateText({
+  model,
+  prompt: 'What is Activepieces?',
+  temperature: 0.7,
+  maxTokens: 500
+});
+
+// Stream text (for real-time responses)
+const stream = await streamText({
+  model,
+  prompt: 'Write a story...',
+  temperature: 0.9
+});
+```
+
+## Agent Execution Flow
+
+When an agent runs:
+
+1. **Parse prompt**: Understand the task and goals
+2. **Plan approach**: Decide which tools to use
+3. **Execute steps**: Call tools iteratively
+4. **Evaluate results**: Check if task is complete
+5. **Iterate if needed**: Continue until success or max steps
+6. **Return output**: Provide structured results
+
+From the source code:
+
+```typescript
+interface AgentTask {
+  status: AgentTaskStatus;        // RUNNING, COMPLETED, FAILED
+  steps: AgentStep[];             // Individual tool calls
+  output?: AgentOutput;           // Final structured output
+  error?: string;                 // Error if failed
+}
+
+enum AgentTaskStatus {
+  RUNNING = 'RUNNING',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED'
+}
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Clear Prompts" icon="message">
+    Write detailed, specific prompts. Include context, constraints, and expected output format.
+  </Card>
+  
+  <Card title="Structured Output" icon="table">
+    Define structured output schemas so you can reliably use agent results in subsequent steps.
+  </Card>
+  
+  <Card title="Limit Tools" icon="toolbox">
+    Give agents only the tools they need. Too many tools can confuse the AI.
+  </Card>
+  
+  <Card title="Test Iterations" icon="repeat">
+    Test with different prompts and tool combinations to find what works best.
+  </Card>
+  
+  <Card title="Monitor Costs" icon="dollar-sign">
+    AI API calls cost money. Monitor usage and optimize prompts to reduce token consumption.
+  </Card>
+  
+  <Card title="Fallback Logic" icon="shield">
+    Add error handling and fallback paths for when AI responses don't meet expectations.
+  </Card>
+</CardGroup>
+
+## AI + MCP: Powerful Combination
+
+Combine AI agents with MCP servers for ultimate flexibility:
+
+1. **Build flows with AI actions**
+2. **Expose flows as MCP tools**
+3. **Use in Claude Desktop/Cursor**
+4. **AI assistants can call your AI-powered workflows**
+
+This creates a powerful cycle where:
+- AI assistants use your workflows
+- Your workflows use AI to be intelligent
+- Everything is connected through MCP
+
+<Info>
+  This is the future of automation: AI-powered workflows that are themselves accessible to AI assistants.
+</Info>
+
+## Example Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Smart Email Processing" icon="envelope">
+    Classify, extract data, and route emails intelligently based on content and context.
+  </Card>
+  
+  <Card title="Content Moderation" icon="shield">
+    Analyze user-generated content for policy violations, spam, or inappropriate material.
+  </Card>
+  
+  <Card title="Customer Analytics" icon="chart-line">
+    Analyze customer feedback, identify trends, and generate insights automatically.
+  </Card>
+  
+  <Card title="Document Processing" icon="file">
+    Extract structured data from invoices, receipts, contracts, and other documents.
+  </Card>
+  
+  <Card title="Lead Qualification" icon="users">
+    Analyze leads, enrich data, and route to appropriate sales reps.
+  </Card>
+  
+  <Card title="Content Creation" icon="pen">
+    Generate blog posts, social media content, and marketing materials at scale.
+  </Card>
+  
+  <Card title="Smart Routing" icon="route">
+    Route tickets, messages, and tasks to the right team based on AI analysis.
+  </Card>
+  
+  <Card title="Data Enrichment" icon="database">
+    Enhance records with additional information from various sources.
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+- [MCP Integration](/concepts/mcp-servers) - Connect AI agents to Claude and Cursor
+- [Build Workflows](/concepts/workflows) - Learn flow structure and triggers
+- [Create Pieces](/pieces/introduction) - Build AI-powered integrations
+- [API Reference](/api/introduction) - Programmatic access to AI features

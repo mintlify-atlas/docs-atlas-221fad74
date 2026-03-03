@@ -1,0 +1,665 @@
+---
+title: Kubernetes Deployment
+description: Deploy Activepieces on Kubernetes using Helm charts for production-scale deployments
+---
+
+Deploy Activepieces on Kubernetes for enterprise-grade scalability, high availability, and automated operations. The official Helm chart includes PostgreSQL and Redis dependencies.
+
+## Prerequisites
+
+<Steps>
+  <Step title="Kubernetes Cluster">
+    - Kubernetes 1.20+ (tested on 1.24+)
+    - At least 3 nodes (for HA setup)
+    - Minimum 8GB RAM and 4 CPU cores total
+  </Step>
+  
+  <Step title="Helm 3">
+    Install Helm package manager:
+    ```bash
+    curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+    helm version
+    ```
+  </Step>
+  
+  <Step title="kubectl Access">
+    Verify cluster access:
+    ```bash
+    kubectl cluster-info
+    kubectl get nodes
+    ```
+  </Step>
+</Steps>
+
+## Quick Installation
+
+<Steps>
+  <Step title="Add Helm repository">
+    ```bash
+    helm repo add activepieces https://activepieces.github.io/helm-charts/
+    helm repo update
+    ```
+  </Step>
+  
+  <Step title="Install Activepieces">
+    ```bash
+    helm install activepieces activepieces/activepieces \
+      --set activepieces.frontendUrl=https://activepieces.yourdomain.com \
+      --set postgresql.auth.password=$(openssl rand -hex 16) \
+      --set redis.auth.password=$(openssl rand -hex 16)
+    ```
+  </Step>
+  
+  <Step title="Wait for deployment">
+    ```bash
+    kubectl get pods -w
+    ```
+    
+    Wait for all pods to be in `Running` state.
+  </Step>
+  
+  <Step title="Access Activepieces">
+    ```bash
+    # Port forward for testing
+    kubectl port-forward svc/activepieces 8080:80
+    ```
+    
+    Access at http://localhost:8080
+  </Step>
+</Steps>
+
+## Helm Chart Overview
+
+The official Helm chart is located at `deploy/activepieces-helm/` in the repository.
+
+### Chart Information
+
+```yaml Chart.yaml
+apiVersion: v2
+name: activepieces
+description: A Helm chart for Activepieces
+icon: https://cdn.activepieces.com/brand/logo.svg
+type: application
+version: 0.3.0
+appVersion: "0.71.2"
+
+dependencies:
+  - name: kubernetes-secret-generator
+    version: "3.4.1"
+    repository: "https://helm.mittwald.de"
+    condition: kubernetes-secret-generator.enabled
+    
+  - name: postgresql
+    version: "11.7.2"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: postgresql.enabled
+    
+  - name: redis
+    version: "17.4.2"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: redis.enabled
+```
+
+### Dependencies
+
+<CardGroup cols={3}>
+  <Card title="PostgreSQL" icon="database">
+    Bitnami PostgreSQL chart (v11.7.2)
+    
+    Automatically provisions database with:
+    - Persistent volume
+    - User credentials
+    - Database initialization
+  </Card>
+  
+  <Card title="Redis" icon="server">
+    Bitnami Redis chart (v17.4.2)
+    
+    Provides job queue with:
+    - Master-replica setup
+    - Persistence
+    - Authentication
+  </Card>
+  
+  <Card title="Secret Generator" icon="key">
+    Kubernetes secret generator (v3.4.1)
+    
+    Auto-generates:
+    - Encryption keys
+    - JWT secrets
+    - Database passwords
+  </Card>
+</CardGroup>
+
+## Configuration Values
+
+### Core Configuration
+
+Create a `values.yaml` file:
+
+```yaml values.yaml
+# Replica count
+replicaCount: 1
+
+# Container image
+image:
+  repository: ghcr.io/activepieces/activepieces
+  pullPolicy: IfNotPresent
+  tag: ""  # Defaults to appVersion from Chart.yaml
+
+# Activepieces configuration
+activepieces:
+  # REQUIRED: Set your domain
+  frontendUrl: "https://activepieces.yourdomain.com"
+  
+  # Edition: ce (Community) or ee (Enterprise)
+  edition: "ce"
+  
+  # Execution mode
+  executionMode: "SANDBOX_CODE_ONLY"
+  
+  # Environment
+  environment: "prod"
+  
+  # Telemetry
+  telemetryEnabled: true
+  
+  # Logging
+  logLevel: "info"
+  logPretty: false
+
+# PostgreSQL configuration
+postgresql:
+  enabled: true
+  auth:
+    database: activepieces
+    username: postgres
+    password: ""  # Auto-generated if empty
+  primary:
+    persistence:
+      enabled: true
+      size: 8Gi
+
+# Redis configuration
+redis:
+  enabled: true
+  auth:
+    enabled: true
+    password: ""  # Auto-generated if empty
+  master:
+    persistence:
+      enabled: true
+      size: 2Gi
+
+# Ingress
+ingress:
+  enabled: false
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  hosts:
+    - host: activepieces.yourdomain.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: activepieces-tls
+      hosts:
+        - activepieces.yourdomain.com
+
+# Resources
+resources:
+  limits:
+    cpu: 2000m
+    memory: 4Gi
+  requests:
+    cpu: 500m
+    memory: 2Gi
+
+# Persistence
+persistence:
+  enabled: true
+  size: 2Gi
+  mountPath: "/usr/src/app/cache"
+```
+
+### Install with Custom Values
+
+```bash
+helm install activepieces activepieces/activepieces \
+  -f values.yaml
+```
+
+## Production Configuration
+
+### High Availability Setup
+
+```yaml values-ha.yaml
+# Multiple replicas
+replicaCount: 3
+
+# Auto-scaling
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# Pod anti-affinity for spreading across nodes
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: activepieces
+          topologyKey: kubernetes.io/hostname
+
+# PostgreSQL HA
+postgresql:
+  enabled: true
+  replication:
+    enabled: true
+    numSynchronousReplicas: 1
+  primary:
+    persistence:
+      enabled: true
+      size: 50Gi
+      storageClass: "fast-ssd"
+
+# Redis HA
+redis:
+  enabled: true
+  architecture: replication
+  master:
+    persistence:
+      enabled: true
+      size: 10Gi
+      storageClass: "fast-ssd"
+  replica:
+    replicaCount: 3
+    persistence:
+      enabled: true
+```
+
+Deploy HA configuration:
+
+```bash
+helm install activepieces activepieces/activepieces \
+  -f values-ha.yaml \
+  --namespace activepieces \
+  --create-namespace
+```
+
+### External Database
+
+Use existing PostgreSQL and Redis:
+
+```yaml values-external.yaml
+activepieces:
+  frontendUrl: "https://activepieces.yourdomain.com"
+
+# Disable built-in PostgreSQL
+postgresql:
+  enabled: false
+  host: "postgres.example.com"
+  port: 5432
+  useSSL: true
+  auth:
+    database: activepieces
+    username: activepieces_user
+    password: "your-secure-password"
+
+# Disable built-in Redis
+redis:
+  enabled: false
+  host: "redis.example.com"
+  port: 6379
+  useSSL: true
+  auth:
+    enabled: true
+    password: "redis-password"
+```
+
+## Ingress Configuration
+
+### Nginx Ingress
+
+```yaml values-ingress.yaml
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  hosts:
+    - host: activepieces.yourdomain.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: activepieces-tls
+      hosts:
+        - activepieces.yourdomain.com
+```
+
+### Install cert-manager (for TLS)
+
+```bash
+# Install cert-manager
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.0/cert-manager.yaml
+
+# Create ClusterIssuer
+cat <<EOF | kubectl apply -f -
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: admin@yourdomain.com
+    privateKeySecretRef:
+      name: letsencrypt-prod
+    solvers:
+    - http01:
+        ingress:
+          class: nginx
+EOF
+```
+
+## Storage Configuration
+
+### S3 Storage
+
+Configure S3 for file storage:
+
+```yaml values-s3.yaml
+s3:
+  enabled: true
+  accessKeyId: "YOUR_ACCESS_KEY"
+  secretAccessKey: "YOUR_SECRET_KEY"
+  bucket: "activepieces-files"
+  region: "us-east-1"
+  endpoint: ""  # For S3-compatible services like MinIO
+  useSignedUrls: true
+  useIrsa: false  # Set true for EKS with IAM roles
+```
+
+### Persistent Volumes
+
+Configure storage classes:
+
+```yaml values-storage.yaml
+persistence:
+  enabled: true
+  size: 10Gi
+  storageClass: "fast-ssd"  # Your storage class
+  accessMode: ReadWriteOnce
+
+postgresql:
+  primary:
+    persistence:
+      enabled: true
+      size: 50Gi
+      storageClass: "fast-ssd"
+
+redis:
+  master:
+    persistence:
+      enabled: true
+      size: 10Gi
+      storageClass: "fast-ssd"
+```
+
+## Managing the Deployment
+
+### Upgrade Activepieces
+
+```bash
+# Update Helm repository
+helm repo update
+
+# Check for updates
+helm search repo activepieces
+
+# Upgrade to latest version
+helm upgrade activepieces activepieces/activepieces \
+  -f values.yaml
+
+# Upgrade to specific version
+helm upgrade activepieces activepieces/activepieces \
+  --version 0.3.0 \
+  -f values.yaml
+```
+
+### Rollback
+
+```bash
+# View release history
+helm history activepieces
+
+# Rollback to previous version
+helm rollback activepieces
+
+# Rollback to specific revision
+helm rollback activepieces 3
+```
+
+### Uninstall
+
+```bash
+# Uninstall Activepieces (keeps PVCs)
+helm uninstall activepieces
+
+# Delete namespace and all resources
+kubectl delete namespace activepieces
+```
+
+## Monitoring and Logs
+
+### View Logs
+
+```bash
+# All pods
+kubectl logs -l app.kubernetes.io/name=activepieces -f
+
+# Specific pod
+kubectl logs activepieces-<pod-id> -f
+
+# Previous crashed container
+kubectl logs activepieces-<pod-id> --previous
+```
+
+### Pod Status
+
+```bash
+# List pods
+kubectl get pods -l app.kubernetes.io/name=activepieces
+
+# Describe pod
+kubectl describe pod activepieces-<pod-id>
+
+# Pod events
+kubectl get events --sort-by=.metadata.creationTimestamp
+```
+
+### Resource Usage
+
+```bash
+# CPU and memory usage
+kubectl top pods -l app.kubernetes.io/name=activepieces
+
+# Node usage
+kubectl top nodes
+```
+
+## Backup and Restore
+
+### Database Backup
+
+```bash
+# Get PostgreSQL pod name
+PG_POD=$(kubectl get pod -l app.kubernetes.io/name=postgresql -o jsonpath="{.items[0].metadata.name}")
+
+# Create backup
+kubectl exec $PG_POD -- pg_dump -U postgres activepieces > backup.sql
+
+# Restore backup
+kubectl exec -i $PG_POD -- psql -U postgres activepieces < backup.sql
+```
+
+### Persistent Volume Backup
+
+```bash
+# Snapshot PVC (requires CSI driver with snapshot support)
+kubectl get pvc
+
+cat <<EOF | kubectl apply -f -
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshot
+metadata:
+  name: activepieces-snapshot
+spec:
+  volumeSnapshotClassName: csi-snapclass
+  source:
+    persistentVolumeClaimName: activepieces-pvc
+EOF
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Pods not starting">
+    Check pod status:
+    ```bash
+    kubectl describe pod activepieces-<pod-id>
+    ```
+    
+    Common issues:
+    - Image pull errors (check `imagePullSecrets`)
+    - Resource constraints (increase `resources.requests`)
+    - PVC binding issues (check storage class)
+  </Accordion>
+  
+  <Accordion title="Database connection errors">
+    Verify PostgreSQL is running:
+    ```bash
+    kubectl get pods -l app.kubernetes.io/name=postgresql
+    kubectl logs -l app.kubernetes.io/name=postgresql
+    ```
+    
+    Test connection:
+    ```bash
+    kubectl run -it --rm psql --image=postgres:14 --restart=Never -- psql -h activepieces-postgresql -U postgres
+    ```
+  </Accordion>
+  
+  <Accordion title="Ingress not working">
+    Check ingress status:
+    ```bash
+    kubectl get ingress
+    kubectl describe ingress activepieces
+    ```
+    
+    Verify ingress controller:
+    ```bash
+    kubectl get pods -n ingress-nginx
+    ```
+    
+    Check DNS:
+    ```bash
+    nslookup activepieces.yourdomain.com
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Advanced Topics
+
+### Custom Secrets
+
+Use existing Kubernetes secrets:
+
+```yaml
+postgresql:
+  auth:
+    existingSecret: "postgres-credentials"
+    secretKeys:
+      adminPasswordKey: "password"
+
+redis:
+  auth:
+    existingSecret: "redis-credentials"
+    secretKeys:
+      redis-password: "password"
+```
+
+### Service Account
+
+```yaml
+serviceAccount:
+  create: true
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::123456789:role/activepieces
+  name: "activepieces"
+```
+
+### Network Policies
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: activepieces-netpol
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: activepieces
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 80
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: postgresql
+    ports:
+    - protocol: TCP
+      port: 5432
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Scaling" icon="chart-line" href="/deployment/scaling">
+    Configure horizontal pod autoscaling
+  </Card>
+  <Card title="Monitoring" icon="chart-bar">
+    Set up Prometheus and Grafana
+  </Card>
+  <Card title="Environment Variables" icon="gear" href="/deployment/environment-variables">
+    Configure all options
+  </Card>
+  <Card title="Workers" icon="users" href="/deployment/workers">
+    Understand worker architecture
+  </Card>
+</CardGroup>

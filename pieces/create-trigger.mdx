@@ -1,0 +1,661 @@
+---
+title: Create a Trigger
+description: Build triggers that start flows when events occur
+---
+
+## What are Triggers?
+
+Triggers are the starting point of automation flows. They listen for events and start flow executions when those events occur. Every flow must begin with a trigger.
+
+Examples:
+- New message posted in Slack
+- New file uploaded to Google Drive
+- New issue created in GitHub
+- New row added to database
+
+## Trigger Types
+
+Activepieces supports three types of triggers:
+
+<CardGroup cols={3}>
+  <Card title="Polling" icon="clock">
+    Periodically check for new data
+  </Card>
+  <Card title="Webhook" icon="webhook">
+    Receive real-time notifications
+  </Card>
+  <Card title="App Webhook" icon="plug">
+    Platform-level webhook handling
+  </Card>
+</CardGroup>
+
+## Creating a Trigger
+
+Use the CLI to generate a trigger:
+
+```bash
+npm run create-trigger
+```
+
+You'll be prompted for:
+- **Piece name**: Which piece to add the trigger to
+- **Trigger name**: Unique identifier (e.g., `new_message`)
+- **Display name**: Human-readable name (e.g., `New Message`)
+- **Description**: What event the trigger watches for
+- **Trigger type**: Polling, Webhook, or App Webhook
+
+## Polling Triggers
+
+Polling triggers check for new data at regular intervals (e.g., every 5 minutes).
+
+### Example: New RSS Items
+
+```typescript
+import { createTrigger, Property, TriggerStrategy } from '@activepieces/pieces-framework';
+import { pollingAuth } from '../auth';
+import Parser from 'rss-parser';
+
+export const newRssItem = createTrigger({
+  auth: pollingAuth,
+  name: 'new_item_in_feed',
+  displayName: 'New Item in Feed',
+  description: 'Triggers when a new item is published in an RSS feed',
+  
+  // Polling trigger type
+  type: TriggerStrategy.POLLING,
+  
+  props: {
+    feedUrl: Property.ShortText({
+      displayName: 'Feed URL',
+      description: 'The URL of the RSS feed',
+      required: true,
+    }),
+  },
+  
+  // Sample data for testing
+  sampleData: {
+    title: 'Sample Article',
+    link: 'https://example.com/article',
+    pubDate: '2024-01-15T10:00:00Z',
+    content: 'Article content...',
+  },
+  
+  // Called when trigger is enabled
+  async onEnable(context) {
+    // Optional: Store initial state
+    const parser = new Parser();
+    const feed = await parser.parseURL(context.propsValue.feedUrl);
+    
+    if (feed.items.length > 0) {
+      // Store the latest item's date to avoid duplicates
+      await context.store.put('lastPubDate', feed.items[0].pubDate);
+    }
+  },
+  
+  // Called when trigger is disabled
+  async onDisable(context) {
+    // Cleanup if needed
+    await context.store.delete('lastPubDate');
+  },
+  
+  // Called periodically to check for new items
+  async run(context) {
+    const parser = new Parser();
+    const feed = await parser.parseURL(context.propsValue.feedUrl);
+    
+    // Get last processed date
+    const lastPubDate = await context.store.get<string>('lastPubDate');
+    const lastDate = lastPubDate ? new Date(lastPubDate) : null;
+    
+    // Filter new items
+    const newItems = feed.items.filter((item) => {
+      if (!lastDate) return true;
+      const itemDate = new Date(item.pubDate || '');
+      return itemDate > lastDate;
+    });
+    
+    // Update last processed date
+    if (newItems.length > 0) {
+      await context.store.put('lastPubDate', newItems[0].pubDate);
+    }
+    
+    // Return new items (they'll trigger flow executions)
+    return newItems;
+  },
+});
+```
+
+### Polling Trigger Configuration
+
+<ParamField path="type" type="TriggerStrategy.POLLING" required>
+  Set trigger type to polling
+</ParamField>
+
+<ParamField path="onEnable" type="function" required>
+  Called when user enables the trigger. Use to initialize state.
+  
+  ```typescript
+  async onEnable(context) {
+    // Store initial state
+    await context.store.put('lastId', null);
+  }
+  ```
+</ParamField>
+
+<ParamField path="onDisable" type="function" required>
+  Called when user disables the trigger. Use for cleanup.
+  
+  ```typescript
+  async onDisable(context) {
+    // Clean up stored state
+    await context.store.delete('lastId');
+  }
+  ```
+</ParamField>
+
+<ParamField path="run" type="function" required>
+  Called periodically to check for new data. Return array of new items.
+  
+  ```typescript
+  async run(context) {
+    const lastId = await context.store.get('lastId');
+    const newItems = await fetchNewItems(lastId);
+    
+    if (newItems.length > 0) {
+      await context.store.put('lastId', newItems[0].id);
+    }
+    
+    return newItems; // Each item triggers a flow execution
+  }
+  ```
+</ParamField>
+
+## Webhook Triggers
+
+Webhook triggers receive real-time notifications from external services. They provide instant execution when events occur.
+
+### Example: New GitHub Issue
+
+```typescript
+import { createTrigger, Property, TriggerStrategy } from '@activepieces/pieces-framework';
+import { githubAuth } from '../auth';
+import { DedupeStrategy, HttpMethod, httpClient } from '@activepieces/pieces-common';
+
+export const newIssue = createTrigger({
+  auth: githubAuth,
+  name: 'new_issue',
+  displayName: 'New Issue',
+  description: 'Triggers when a new issue is created',
+  
+  // Webhook trigger type
+  type: TriggerStrategy.WEBHOOK,
+  
+  props: {
+    repository: Property.ShortText({
+      displayName: 'Repository',
+      description: 'Repository name (owner/repo)',
+      required: true,
+    }),
+  },
+  
+  sampleData: {
+    action: 'opened',
+    issue: {
+      id: 1,
+      number: 42,
+      title: 'Sample Issue',
+      body: 'Issue description',
+      user: {
+        login: 'username',
+      },
+      created_at: '2024-01-15T10:00:00Z',
+    },
+  },
+  
+  // Register webhook when enabled
+  async onEnable(context) {
+    const [owner, repo] = context.propsValue.repository.split('/');
+    
+    // Register webhook with GitHub
+    const response = await httpClient.sendRequest({
+      method: HttpMethod.POST,
+      url: `https://api.github.com/repos/${owner}/${repo}/hooks`,
+      headers: {
+        'Authorization': `Bearer ${context.auth.access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: {
+        name: 'web',
+        active: true,
+        events: ['issues'],
+        config: {
+          url: context.webhookUrl, // Platform provides this
+          content_type: 'json',
+          secret: context.webhookSecret, // For verification
+        },
+      },
+    });
+    
+    // Store webhook ID for cleanup
+    await context.store.put('webhookId', response.body.id);
+  },
+  
+  // Unregister webhook when disabled
+  async onDisable(context) {
+    const webhookId = await context.store.get<number>('webhookId');
+    if (!webhookId) return;
+    
+    const [owner, repo] = context.propsValue.repository.split('/');
+    
+    await httpClient.sendRequest({
+      method: HttpMethod.DELETE,
+      url: `https://api.github.com/repos/${owner}/${repo}/hooks/${webhookId}`,
+      headers: {
+        'Authorization': `Bearer ${context.auth.access_token}`,
+      },
+    });
+    
+    await context.store.delete('webhookId');
+  },
+  
+  // Process incoming webhook data
+  async run(context) {
+    const payload = context.payload.body;
+    
+    // Filter for new issues only
+    if (payload.action !== 'opened') {
+      return [];
+    }
+    
+    // Return the issue data
+    return [payload];
+  },
+});
+```
+
+### Webhook Trigger Configuration
+
+<ParamField path="type" type="TriggerStrategy.WEBHOOK" required>
+  Set trigger type to webhook
+</ParamField>
+
+<ParamField path="onEnable" type="function" required>
+  Register the webhook with the external service.
+  
+  ```typescript
+  async onEnable(context) {
+    const webhookId = await registerWebhook({
+      url: context.webhookUrl,
+      secret: context.webhookSecret,
+    });
+    
+    await context.store.put('webhookId', webhookId);
+  }
+  ```
+</ParamField>
+
+<ParamField path="onDisable" type="function" required>
+  Unregister the webhook.
+  
+  ```typescript
+  async onDisable(context) {
+    const webhookId = await context.store.get('webhookId');
+    await unregisterWebhook(webhookId);
+    await context.store.delete('webhookId');
+  }
+  ```
+</ParamField>
+
+<ParamField path="run" type="function" required>
+  Process incoming webhook payload. Return array of events.
+  
+  ```typescript
+  async run(context) {
+    const payload = context.payload.body;
+    
+    // Filter/transform as needed
+    if (shouldProcess(payload)) {
+      return [payload];
+    }
+    
+    return [];
+  }
+  ```
+</ParamField>
+
+## App Webhook Triggers
+
+App webhooks use platform-level webhooks shared across all users. The platform manages webhook registration automatically.
+
+### Example: Slack New Message
+
+```typescript packages/pieces/community/slack/src/lib/triggers/new-message.ts
+import { createTrigger, Property, TriggerStrategy } from '@activepieces/pieces-framework';
+import { slackAuth } from '../auth';
+
+export const newMessageTrigger = createTrigger({
+  auth: slackAuth,
+  name: 'new-message',
+  displayName: 'New Public Message Posted Anywhere',
+  description: 'Triggers when a new message is posted to any channel',
+  
+  props: {
+    ignoreBots: Property.Checkbox({
+      displayName: 'Ignore Bot Messages?',
+      required: true,
+      defaultValue: false,
+    }),
+  },
+  
+  // App webhook type
+  type: TriggerStrategy.APP_WEBHOOK,
+  
+  sampleData: {
+    type: 'message',
+    channel: 'C1234567890',
+    user: 'U1234567890',
+    text: 'Hello, world!',
+    ts: '1234567890.123456',
+  },
+  
+  // Register to listen for events
+  async onEnable(context) {
+    // Get team ID from OAuth data
+    const teamId = context.auth.data['team_id'] ?? context.auth.data['team']['id'];
+    
+    // Tell platform to route 'message' events for this team to this trigger
+    context.app.createListeners({
+      events: ['message'],
+      identifierValue: teamId,
+    });
+  },
+  
+  async onDisable(context) {
+    // Platform handles cleanup automatically
+  },
+
+  // Process events routed by platform
+  async run(context) {
+    const payload = context.payload.body;
+
+    // Filter out non-channel messages
+    if (!['channel', 'group'].includes(payload.event.channel_type)) {
+      return [];
+    }
+
+    // Filter out bot messages if configured
+    if (context.propsValue.ignoreBots && payload.event.bot_id) {
+      return [];
+    }
+    
+    return [payload.event];
+  },
+});
+```
+
+### App Webhook Configuration
+
+For app webhooks, you also need to configure event processors in the main piece:
+
+```typescript src/index.ts
+export const slack = createPiece({
+  displayName: 'Slack',
+  auth: slackAuth,
+  
+  // Event processors for app webhooks
+  events: {
+    // Parse incoming events and route them
+    parseAndReply: ({ payload, server }) => {
+      const eventPayloadBody = payload.body;
+      
+      // Handle Slack challenge for webhook verification
+      if (eventPayloadBody.challenge) {
+        return {
+          reply: {
+            body: eventPayloadBody.challenge,
+            headers: {},
+          },
+        };
+      }
+      
+      // Return event type and identifier for routing
+      return {
+        event: eventPayloadBody?.event?.type,
+        identifierValue: eventPayloadBody.team_id,
+      };
+    },
+    
+    // Verify webhook authenticity
+    verify: ({ webhookSecret, payload }) => {
+      const timestamp = payload.headers['x-slack-request-timestamp'];
+      const signature = payload.headers['x-slack-signature'];
+      const signatureBaseString = `v0:${timestamp}:${payload.rawBody}`;
+      
+      const hmac = crypto.createHmac('sha256', webhookSecret);
+      hmac.update(signatureBaseString);
+      const computedSignature = `v0=${hmac.digest('hex')}`;
+      
+      return signature === computedSignature;
+    },
+  },
+  
+  actions: [...],
+  triggers: [newMessageTrigger],
+});
+```
+
+## Trigger Context
+
+The context object in triggers:
+
+```typescript
+interface TriggerContext {
+  auth: OAuth2PropertyValue | string | CustomAuthValue;
+  propsValue: Record<string, any>;
+  
+  // Webhook-specific
+  webhookUrl?: string;      // URL to register with service
+  webhookSecret?: string;   // Secret for verification
+  payload?: {               // Incoming webhook data
+    body: any;
+    headers: Record<string, string>;
+    rawBody: string;
+  };
+  
+  // App webhook specific
+  app?: {
+    createListeners(config: {
+      events: string[];
+      identifierValue: string;
+    }): void;
+  };
+  
+  // Storage
+  store: {
+    get<T>(key: string): Promise<T | null>;
+    put<T>(key: string, value: T): Promise<void>;
+    delete(key: string): Promise<void>;
+  };
+}
+```
+
+## Deduplication
+
+Prevent duplicate events from triggering flows multiple times:
+
+```typescript
+import { DEDUPE_KEY_PROPERTY } from '@activepieces/pieces-framework';
+
+async run(context) {
+  const newItems = await fetchNewItems();
+  
+  // Add dedupe key to each item
+  return newItems.map((item) => ({
+    ...item,
+    [DEDUPE_KEY_PROPERTY]: item.id, // Use unique identifier
+  }));
+}
+```
+
+The platform will automatically filter out items with duplicate keys.
+
+## Testing Triggers
+
+<Tabs>
+  <Tab title="Polling Trigger">
+    <Steps>
+      <Step title="Create Test Flow">
+        Add your polling trigger to a new flow
+      </Step>
+      
+      <Step title="Configure Properties">
+        Fill in required properties
+      </Step>
+      
+      <Step title="Click Test">
+        The `test` function (or `run` if no test function) will execute
+      </Step>
+      
+      <Step title="Check Output">
+        Verify the trigger returns expected data
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="Webhook Trigger">
+    <Steps>
+      <Step title="Enable Trigger">
+        Add trigger to flow and enable it
+      </Step>
+      
+      <Step title="Trigger External Event">
+        Perform the action in the external service (e.g., create an issue)
+      </Step>
+      
+      <Step title="Verify Webhook">
+        Check that webhook was registered correctly
+      </Step>
+      
+      <Step title="Check Execution">
+        Verify flow executed with correct data
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="App Webhook">
+    <Steps>
+      <Step title="Configure App Webhook">
+        Set up app webhook URL in the service's settings
+      </Step>
+      
+      <Step title="Enable Trigger">
+        Add and enable trigger in flow
+      </Step>
+      
+      <Step title="Trigger Event">
+        Perform action in the service
+      </Step>
+      
+      <Step title="Verify Routing">
+        Check that event was routed to correct trigger
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Storage for State">
+    Store state to track processed items:
+    
+    ```typescript
+    // Store last processed ID
+    const lastId = await context.store.get<string>('lastId');
+    const newItems = items.filter(item => item.id > lastId);
+    
+    if (newItems.length > 0) {
+      await context.store.put('lastId', newItems[0].id);
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Handle Empty Results">
+    Always return an array, even if empty:
+    
+    ```typescript
+    async run(context) {
+      const items = await fetchItems();
+      
+      if (!items || items.length === 0) {
+        return []; // Return empty array, not null
+      }
+      
+      return items;
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Implement Deduplication">
+    Use dedupe keys to prevent duplicate executions:
+    
+    ```typescript
+    return items.map(item => ({
+      ...item,
+      [DEDUPE_KEY_PROPERTY]: item.id,
+    }));
+    ```
+  </Accordion>
+
+  <Accordion title="Clean Up Resources">
+    Always clean up in `onDisable`:
+    
+    ```typescript
+    async onDisable(context) {
+      const webhookId = await context.store.get('webhookId');
+      
+      if (webhookId) {
+        await deleteWebhook(webhookId);
+        await context.store.delete('webhookId');
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Provide Good Sample Data">
+    Sample data helps users understand the trigger output:
+    
+    ```typescript
+    sampleData: {
+      id: '12345',
+      title: 'Example Item',
+      created_at: '2024-01-15T10:00:00Z',
+      author: {
+        name: 'John Doe',
+        email: 'john@example.com',
+      },
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Trigger Type Comparison
+
+| Feature | Polling | Webhook | App Webhook |
+|---------|---------|---------|-------------|
+| **Latency** | 5-15 minutes | Instant | Instant |
+| **API Calls** | Regular polling | On event only | On event only |
+| **Setup Complexity** | Simple | Moderate | Simple |
+| **User Setup** | None | Webhook registration | None (platform handles) |
+| **Best For** | RSS feeds, APIs without webhooks | Real-time events | Shared webhooks (Slack, Discord) |
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Properties Guide" href="/pieces/properties" icon="sliders">
+    Learn about all property types
+  </Card>
+  <Card title="Testing" href="/pieces/testing" icon="flask">
+    Write tests for your triggers
+  </Card>
+</CardGroup>

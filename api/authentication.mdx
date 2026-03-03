@@ -1,0 +1,360 @@
+---
+title: 'Authentication'
+description: 'Authenticate API requests using API keys or JWT tokens'
+icon: 'key'
+---
+
+## Overview
+
+Activepieces API supports two authentication methods:
+
+1. **API Keys** - Best for server-to-server integrations
+2. **JWT Tokens** - Used for user sessions and authenticated requests
+
+All authenticated requests must include credentials in the request headers.
+
+## API Keys
+
+API keys are platform-scoped credentials for programmatic access to the Activepieces API.
+
+### Creating an API Key
+
+API keys can be created via the platform dashboard or API:
+
+1. Navigate to Platform Settings → API Keys
+2. Click "Create API Key"
+3. Provide a display name
+4. Copy the generated key (starts with `sk-`)
+
+<Warning>
+API keys are shown only once during creation. Store them securely!
+</Warning>
+
+### API Key Format
+
+API keys follow this format:
+```
+sk-[64 random characters]
+```
+
+Example: `sk-abc123def456...xyz789`
+
+### Using API Keys
+
+Include the API key in the `Authorization` header with the `Bearer` scheme:
+
+```bash
+curl https://cloud.activepieces.com/api/v1/flows \
+  -H "Authorization: Bearer sk-your-api-key-here"
+```
+
+### API Key Security
+
+- API keys are hashed using SHA-256 before storage
+- Only the last 4 characters are stored in plaintext for identification
+- Keys track `lastUsedAt` timestamp for auditing
+- Keys are scoped to a specific platform
+
+### Managing API Keys
+
+<Tabs>
+  <Tab title="List API Keys">
+```bash
+curl https://cloud.activepieces.com/api/v1/api-keys \
+  -H "Authorization: Bearer sk-your-api-key-here"
+```
+
+**Response:**
+```json
+{
+  "data": [
+    {
+      "id": "key_123",
+      "platformId": "platform_456",
+      "displayName": "Production API Key",
+      "truncatedValue": "...xyz9",
+      "lastUsedAt": "2024-01-15T10:30:00.000Z",
+      "created": "2024-01-01T00:00:00.000Z"
+    }
+  ],
+  "next": null,
+  "previous": null
+}
+```
+  </Tab>
+  <Tab title="Delete API Key">
+```bash
+curl -X DELETE https://cloud.activepieces.com/api/v1/api-keys/{keyId} \
+  -H "Authorization: Bearer sk-your-api-key-here"
+```
+
+**Response:** `204 No Content`
+  </Tab>
+</Tabs>
+
+## JWT Tokens
+
+JWT (JSON Web Token) tokens are used for user authentication and session management.
+
+### Obtaining a JWT Token
+
+Users can obtain JWT tokens through sign-in:
+
+```bash
+curl -X POST https://cloud.activepieces.com/api/v1/authentication/sign-in \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "your-password"
+  }'
+```
+
+**Response:**
+```json
+{
+  "id": "user_123",
+  "email": "user@example.com",
+  "firstName": "John",
+  "lastName": "Doe",
+  "platformId": "platform_456",
+  "projectId": "project_789",
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "tokenVersion": 1
+}
+```
+
+### Using JWT Tokens
+
+Include the JWT token in the `Authorization` header:
+
+```bash
+curl https://cloud.activepieces.com/api/v1/flows \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+### JWT Token Structure
+
+JWT tokens contain the principal information:
+
+```json
+{
+  "type": "USER",
+  "id": "user_123",
+  "projectId": "project_789",
+  "platform": {
+    "id": "platform_456"
+  },
+  "tokenVersion": 1,
+  "exp": 1640000000
+}
+```
+
+### Token Expiration
+
+- **Default expiration**: 7 days
+- **Engine tokens**: 100 years (long-lived for flow execution)
+- **Worker tokens**: 100 years (for internal worker processes)
+
+### Token Versioning
+
+Tokens include a `tokenVersion` to enable session invalidation:
+
+- Each user has a `tokenVersion` stored in their identity
+- When a token is verified, the version is checked
+- Incrementing the version invalidates all existing tokens
+- Useful for security events (password reset, logout all devices)
+
+## Authentication Headers
+
+### Required Headers
+
+| Header | Value | Description |
+|--------|-------|-------------|
+| `Authorization` | `Bearer <token>` | API key or JWT token |
+| `Content-Type` | `application/json` | Required for POST/PUT requests |
+
+### Optional Headers
+
+| Header | Description |
+|--------|-------------|
+| `ap-parent-run-id` | Parent run ID for nested flow executions |
+| `ap-fail-parent-on-failure` | Whether to fail parent run on child failure |
+
+## Authentication Errors
+
+### Invalid Bearer Token (401)
+
+```json
+{
+  "statusCode": 401,
+  "code": "INVALID_BEARER_TOKEN",
+  "params": {
+    "message": "invalid access token or session expired"
+  }
+}
+```
+
+**Common causes:**
+- Token is malformed or corrupted
+- Token signature verification failed
+- Token has expired
+
+### Session Expired (401)
+
+```json
+{
+  "statusCode": 401,
+  "code": "SESSION_EXPIRED",
+  "params": {
+    "message": "The session has expired or the user is not verified."
+  }
+}
+```
+
+**Common causes:**
+- Token version mismatch (user logged out)
+- User account is inactive
+- User identity is not verified
+
+### Authorization Error (403)
+
+```json
+{
+  "statusCode": 403,
+  "code": "AUTHORIZATION",
+  "params": {}
+}
+```
+
+**Common causes:**
+- Insufficient permissions for the requested operation
+- Attempting to access resources in a different project/platform
+
+## Security Best Practices
+
+<AccordionGroup>
+  <Accordion title="Secure API Key Storage">
+    - Store API keys in environment variables or secure vaults
+    - Never commit API keys to version control
+    - Rotate API keys periodically
+    - Use different API keys for different environments
+  </Accordion>
+  
+  <Accordion title="Token Handling">
+    - Store JWT tokens securely (e.g., HTTP-only cookies)
+    - Implement token refresh logic before expiration
+    - Clear tokens on logout
+    - Validate token expiration on the client side
+  </Accordion>
+  
+  <Accordion title="Network Security">
+    - Always use HTTPS in production
+    - Implement IP allowlisting for sensitive operations
+    - Monitor API key usage via `lastUsedAt` timestamps
+    - Set up alerts for suspicious authentication patterns
+  </Accordion>
+</AccordionGroup>
+
+## Permission System
+
+Activepieces uses a role-based permission system:
+
+### Principal Types
+
+- `USER` - Regular user with project-scoped permissions
+- `SERVICE` - API key with platform-scoped permissions
+- `ENGINE` - Internal engine execution context
+- `WORKER` - Internal worker process
+
+### Common Permissions
+
+| Permission | Description |
+|-----------|-------------|
+| `READ_FLOW` | View flows |
+| `WRITE_FLOW` | Create/update flows |
+| `UPDATE_FLOW_STATUS` | Enable/disable flows |
+| `READ_RUN` | View flow runs |
+| `WRITE_RUN` | Trigger/retry flow runs |
+| `READ_APP_CONNECTION` | View connections |
+| `WRITE_APP_CONNECTION` | Create/update connections |
+| `WRITE_PROJECT` | Update project settings |
+
+## Code Examples
+
+<CodeGroup>
+```typescript Node.js
+import axios from 'axios';
+
+const client = axios.create({
+  baseURL: 'https://cloud.activepieces.com/api/v1',
+  headers: {
+    'Authorization': `Bearer ${process.env.ACTIVEPIECES_API_KEY}`,
+    'Content-Type': 'application/json'
+  }
+});
+
+// List flows
+const response = await client.get('/flows', {
+  params: { projectId: 'project_123' }
+});
+
+console.log(response.data);
+```
+
+```python Python
+import os
+import requests
+
+API_KEY = os.environ['ACTIVEPIECES_API_KEY']
+BASE_URL = 'https://cloud.activepieces.com/api/v1'
+
+headers = {
+    'Authorization': f'Bearer {API_KEY}',
+    'Content-Type': 'application/json'
+}
+
+# List flows
+response = requests.get(
+    f'{BASE_URL}/flows',
+    headers=headers,
+    params={'projectId': 'project_123'}
+)
+
+print(response.json())
+```
+
+```go Go
+package main
+
+import (
+    "fmt"
+    "net/http"
+    "os"
+)
+
+func main() {
+    apiKey := os.Getenv("ACTIVEPIECES_API_KEY")
+    baseURL := "https://cloud.activepieces.com/api/v1"
+    
+    client := &http.Client{}
+    req, _ := http.NewRequest("GET", baseURL+"/flows?projectId=project_123", nil)
+    req.Header.Add("Authorization", "Bearer "+apiKey)
+    
+    resp, _ := client.Do(req)
+    defer resp.Body.Close()
+    
+    // Handle response
+}
+```
+</CodeGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Flows API" icon="diagram-project" href="/api/flows">
+    Start creating and managing flows
+  </Card>
+  <Card title="Projects API" icon="folder" href="/api/projects">
+    Manage projects and team settings
+  </Card>
+</CardGroup>

@@ -1,0 +1,653 @@
+---
+title: Publishing Workflows
+description: Learn how to publish, enable, and test workflows before production deployment
+icon: 'rocket'
+---
+
+Publishing a workflow makes it ready for production use. This guide covers the publishing process, testing strategies, and managing workflow states.
+
+## Understanding Flow States
+
+Workflows in Activepieces have two key state dimensions:
+
+### Version State
+
+```typescript
+// From packages/shared/src/lib/automation/flows/flow-version.ts
+export enum FlowVersionState {
+  LOCKED = 'LOCKED',    // Published version, immutable
+  DRAFT = 'DRAFT'       // Editable version
+}
+```
+
+<CardGroup cols={2}>
+  <Card title="Draft" icon="pencil">
+    Editable version where you make changes. Not running in production.
+  </Card>
+  <Card title="Locked" icon="lock">
+    Published version that's immutable and running in production.
+  </Card>
+</CardGroup>
+
+### Flow Status
+
+```typescript
+// From packages/shared/src/lib/automation/flows/flow.ts
+export enum FlowStatus {
+  ENABLED = 'ENABLED',    // Actively running
+  DISABLED = 'DISABLED'   // Paused
+}
+```
+
+<Note>
+A flow must be **published** (have a locked version) before it can be **enabled**.
+</Note>
+
+## Publishing Your First Flow
+
+<Steps>
+  <Step title="Complete Your Workflow">
+    Ensure all steps are configured and valid:
+
+    ```typescript
+    // From packages/shared/src/lib/automation/flows/flow-version.ts
+    {
+      "flowVersion": {
+        "valid": true,  // All steps must be valid
+        "state": "DRAFT",
+        "trigger": { /* configured */ },
+        // ... actions
+      }
+    }
+    ```
+
+    <Warning>
+    You cannot publish an invalid flow. Fix all validation errors first.
+    </Warning>
+  </Step>
+
+  <Step title="Test Your Flow">
+    Click **Test Flow** to run it with sample data:
+
+    ```typescript
+    // From packages/web/src/app/builder/flow-canvas/widgets/test-flow-widget.tsx
+    const { mutate: runFlow } = flowHooks.useTestFlowOrStartManualTrigger({
+      flowVersionId: flowVersion.id,
+      onUpdateRun: (response) => {
+        // View execution results
+      }
+    });
+    ```
+
+    Verify:
+    - All steps execute successfully
+    - Data flows correctly between steps
+    - Output matches expectations
+  </Step>
+
+  <Step title="Save Changes">
+    Activepieces auto-saves as you work, but ensure all changes are saved:
+
+    ```typescript
+    // Changes are automatically saved
+    // Wait for "Saving..." indicator to complete
+    ```
+  </Step>
+
+  <Step title="Click Publish">
+    Click the **Publish** button at the top of the canvas:
+
+    ```typescript
+    // From packages/web/src/app/builder/flow-canvas/widgets/publish-flow-reminder-widget.tsx
+    const { mutateAsync: publish } = flowHooks.useChangeFlowStatus({
+      flowId: flow.id,
+      change: 'publish',
+      onSuccess: (response) => {
+        setFlow(response.flow);
+        setVersion(response.flow.version);
+      }
+    });
+    ```
+
+    This creates a locked version and sets it as published.
+  </Step>
+
+  <Step title="Enable the Flow">
+    After publishing, toggle the flow status to **Enabled**:
+
+    ```typescript
+    // From packages/web/src/features/flows/components/flow-status-toggle.tsx
+    const { mutate: changeStatus } = flowHooks.useChangeFlowStatus({
+      flowId: flow.id,
+      change: FlowStatus.ENABLED,
+      onSuccess: (response) => {
+        // Flow is now running!
+      }
+    });
+    ```
+  </Step>
+</Steps>
+
+## The Publishing Widget
+
+When you have unpublished changes, you'll see a widget at the top of the canvas:
+
+```typescript
+// From packages/web/src/app/builder/flow-canvas/widgets/publish-flow-reminder-widget.tsx
+<PublishFlowReminderWidget>
+  <div>
+    "You have unpublished changes"
+    
+    <Button onClick={() => discardChange()}>
+      Discard changes
+    </Button>
+    
+    <Button onClick={() => publish()} disabled={!isValid}>
+      Publish
+    </Button>
+  </div>
+</PublishFlowReminderWidget>
+```
+
+<Tabs>
+  <Tab title="Publish">
+    Creates a new locked version with your changes.
+  </Tab>
+
+  <Tab title="Discard Changes">
+    Reverts your draft to match the currently published version.
+  </Tab>
+</Tabs>
+
+## Flow Status Toggle
+
+The status toggle controls whether a flow is actively running:
+
+```typescript
+// From packages/web/src/features/flows/components/flow-status-toggle.tsx
+<Switch
+  checked={isFlowPublished}
+  onCheckedChange={() => changeStatus()}
+  disabled={
+    isLoading ||
+    !userHasPermissionToToggleFlowStatus ||
+    isNil(flow.publishedVersionId)  // Must publish first!
+  }
+/>
+```
+
+<CardGroup cols={2}>
+  <Card title="Enabled" icon="toggle-on">
+    Flow is active and will execute when triggered.
+  </Card>
+  <Card title="Disabled" icon="toggle-off">
+    Flow is paused and won't execute.
+  </Card>
+</CardGroup>
+
+<Note>
+The toggle is disabled until you publish the flow for the first time.
+</Note>
+
+## Testing Strategies
+
+### Test Individual Steps
+
+You can test steps one at a time:
+
+<Steps>
+  <Step title="Configure Trigger">
+    Set up your trigger with sample data or test credentials.
+  </Step>
+
+  <Step title="Test Trigger">
+    Click the test button on the trigger to generate sample data.
+  </Step>
+
+  <Step title="Add First Action">
+    Add and configure the first action.
+  </Step>
+
+  <Step title="Test Action">
+    Test the action using the trigger's sample data.
+  </Step>
+
+  <Step title="Repeat">
+    Continue adding and testing actions one by one.
+  </Step>
+</Steps>
+
+### Test Complete Flow
+
+```typescript
+// From packages/web/src/app/builder/flow-canvas/widgets/test-flow-widget.tsx
+const TestFlowWidget = () => {
+  const triggerHasSampleData = 
+    flowVersion.trigger.type === FlowTriggerType.PIECE &&
+    !isNil(flowVersion.trigger.settings.sampleData?.lastTestDate);
+
+  return (
+    <AboveTriggerButton
+      onClick={() => runFlow()}
+      text={isManualTrigger ? 'Run Flow' : 'Test Flow'}
+      disable={!triggerHasSampleData && !isManualTrigger}
+      loading={isTestingFlow}
+    />
+  );
+};
+```
+
+<Warning>
+The **Test Flow** button is disabled until your trigger has sample data.
+</Warning>
+
+### Testing Environments
+
+```typescript
+// From packages/shared/src/lib/automation/flow-run/flow-run.ts
+export enum RunEnvironment {
+  PRODUCTION = 'PRODUCTION',  // Published, enabled flows
+  TESTING = 'TESTING'         // Test runs
+}
+```
+
+<Tabs>
+  <Tab title="Testing Environment">
+    - Triggered manually via "Test Flow" button
+    - Uses sample data
+    - Doesn't affect production data
+    - Logged separately from production runs
+  </Tab>
+
+  <Tab title="Production Environment">
+    - Triggered by actual events (webhooks, schedules)
+    - Uses real data
+    - Affects production systems
+    - Counted towards usage limits
+  </Tab>
+</Tabs>
+
+## Version Management
+
+Every time you publish, a new locked version is created:
+
+```typescript
+// From packages/server/api/src/app/flows/flow-version/flow-version.service.ts
+export type FlowVersion = {
+  id: string,
+  flowId: string,
+  displayName: string,
+  trigger: FlowTrigger,
+  valid: boolean,
+  state: FlowVersionState.DRAFT | FlowVersionState.LOCKED,
+  created: string,
+  updated: string,
+  updatedBy: string | null
+}
+```
+
+### Lock Piece Versions
+
+When publishing, piece versions are locked:
+
+```typescript
+// From packages/server/api/src/app/flows/flow-version/flow-version.service.ts
+async lockPieceVersions(flowVersion: FlowVersion): Promise<FlowVersion> {
+  const pieceVersion: Record<string, string> = {};
+  const steps = flowStructureUtil.getAllSteps(flowVersion.trigger);
+  
+  for (const step of steps) {
+    if ([FlowActionType.PIECE, FlowTriggerType.PIECE].includes(step.type)) {
+      const pieceMetadata = await pieceMetadataService.getOrThrow({
+        name: step.settings.pieceName,
+        version: step.settings.pieceVersion
+      });
+      pieceVersion[step.name] = pieceMetadata.version;
+    }
+  }
+  
+  // Lock to specific versions
+  return transferFlow(flowVersion, (step) => {
+    if (pieceVersion[step.name]) {
+      step.settings.pieceVersion = pieceVersion[step.name];
+    }
+    return step;
+  });
+}
+```
+
+<Note>
+Locking piece versions ensures your published workflow always uses the same piece versions, preventing breaking changes.
+</Note>
+
+## Publishing Workflow
+
+### Apply Operation
+
+```typescript
+// From packages/server/api/src/app/flows/flow-version/flow-version.service.ts
+async applyOperation({
+  flowVersion,
+  projectId,
+  userId,
+  userOperation,
+  entityManager
+}) {
+  let operations: FlowOperationRequest[] = [];
+  
+  switch (userOperation.type) {
+    case FlowOperationType.LOCK_FLOW:
+      // Lock piece versions first
+      mutatedFlowVersion = await this.lockPieceVersions({
+        projectId,
+        flowVersion: mutatedFlowVersion,
+        entityManager
+      });
+      operations = [userOperation];
+      break;
+    
+    // ... other operations
+  }
+  
+  // Update metadata
+  mutatedFlowVersion.updated = dayjs().toISOString();
+  mutatedFlowVersion.updatedBy = userId;
+  
+  return flowVersionRepo.save(mutatedFlowVersion);
+}
+```
+
+## Enabling and Disabling Flows
+
+### Flow Status API
+
+```typescript
+// From packages/shared/src/lib/automation/flows/flow.ts
+export type Flow = {
+  id: string,
+  projectId: string,
+  status: FlowStatus.ENABLED | FlowStatus.DISABLED,
+  publishedVersionId: string | null,
+  operationStatus: FlowOperationStatus  // ENABLING, DISABLING, etc.
+}
+```
+
+### Operation Status
+
+```typescript
+export enum FlowOperationStatus {
+  NONE = 'NONE',
+  DELETING = 'DELETING',
+  ENABLING = 'ENABLING',
+  DISABLING = 'DISABLING'
+}
+```
+
+Flows show intermediate status while enabling/disabling:
+
+<Steps>
+  <Step title="User Toggles Status">
+    User clicks the toggle to enable/disable.
+  </Step>
+
+  <Step title="Status Changes to ENABLING/DISABLING">
+    The `operationStatus` shows the operation in progress.
+  </Step>
+
+  <Step title="System Updates Triggers">
+    Background jobs register/unregister webhooks, schedules, etc.
+  </Step>
+
+  <Step title="Status Changes to NONE">
+    Operation completes, flow is now enabled/disabled.
+  </Step>
+</Steps>
+
+## Pre-Flight Checks
+
+Before publishing, ensure:
+
+<AccordionGroup>
+  <Accordion title="All Steps Are Valid">
+    ```typescript
+    flowVersion.valid === true
+    ```
+    
+    Each step must be properly configured with:
+    - Required fields filled
+    - Valid connections selected
+    - Proper data mappings
+  </Accordion>
+
+  <Accordion title="Trigger Is Configured">
+    ```typescript
+    flowVersion.trigger.type !== FlowTriggerType.EMPTY
+    flowVersion.trigger.valid === true
+    ```
+    
+    Your trigger must be:
+    - Fully configured
+    - Have required authentication
+    - Pass validation checks
+  </Accordion>
+
+  <Accordion title="Test Run Succeeds">
+    Always test your flow before publishing:
+    - Run with sample data
+    - Check all step outputs
+    - Verify final result
+  </Accordion>
+
+  <Accordion title="Connections Are Active">
+    Ensure all connections used by the flow:
+    - Are properly authenticated
+    - Have necessary permissions
+    - Are not expired
+  </Accordion>
+
+  <Accordion title="Rate Limits Considered">
+    If using external APIs:
+    - Check rate limits
+    - Consider batch sizes
+    - Plan for peak usage
+  </Accordion>
+</AccordionGroup>
+
+## Rolling Back Changes
+
+If you published changes but need to revert:
+
+### Method 1: Discard Draft Changes
+
+```typescript
+// From packages/web/src/app/builder/flow-canvas/widgets/publish-flow-reminder-widget.tsx
+const { mutate: discardChange } = useMutation({
+  mutationFn: async () => {
+    if (!flow.publishedVersionId) return;
+    
+    // Overwrite draft with published version
+    await overWriteDraftWithVersion({
+      flowId: flow.id,
+      versionId: flow.publishedVersionId
+    });
+    
+    await publish();
+  }
+});
+```
+
+This reverts your draft to the currently published version.
+
+### Method 2: Publish Previous Version
+
+<Steps>
+  <Step title="View Version History">
+    Click on the version selector to see all versions.
+  </Step>
+
+  <Step title="Select Previous Version">
+    Choose the version you want to restore.
+  </Step>
+
+  <Step title="Use as Draft">
+    Click "Use as Draft" to copy it to your draft.
+  </Step>
+
+  <Step title="Publish">
+    Publish the restored version.
+  </Step>
+</Steps>
+
+```typescript
+// From packages/server/api/src/app/flows/flow-version/flow-version.service.ts
+case FlowOperationType.USE_AS_DRAFT: {
+  const previousVersion = await flowVersionService.getFlowVersionOrThrow({
+    flowId: flowVersion.flowId,
+    versionId: userOperation.request.versionId,
+    removeConnectionsName: false
+  });
+  
+  operations = [{
+    type: FlowOperationType.IMPORT_FLOW,
+    request: {
+      trigger: previousVersion.trigger,
+      displayName: previousVersion.displayName,
+      schemaVersion: previousVersion.schemaVersion,
+      notes: previousVersion.notes
+    }
+  }];
+  break;
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Test Thoroughly Before Publishing">
+    - Test with real-world data samples
+    - Test edge cases and error scenarios
+    - Verify all integrations work
+    - Check performance with expected load
+  </Accordion>
+
+  <Accordion title="Use Descriptive Version Names">
+    Add notes or comments to explain what changed in each version:
+    
+    ```typescript
+    "Added error handling to API calls"
+    "Fixed data mapping for user emails"
+    ```
+  </Accordion>
+
+  <Accordion title="Enable Gradually">
+    For critical workflows:
+    1. Publish the new version
+    2. Keep old version enabled
+    3. Test new version manually
+    4. Switch to new version
+    5. Monitor for issues
+  </Accordion>
+
+  <Accordion title="Monitor After Publishing">
+    - Check run history regularly
+    - Set up error notifications
+    - Review execution logs
+    - Track success rates
+  </Accordion>
+
+  <Accordion title="Keep Draft Clean">
+    - Don't leave unfinished changes in draft
+    - Publish or discard regularly
+    - Use version history to track changes
+  </Accordion>
+</AccordionGroup>
+
+## Publishing Checklist
+
+<Steps>
+  <Step title="✅ All Steps Valid">
+    Every step shows green validation indicator.
+  </Step>
+
+  <Step title="✅ Flow Tested">
+    Test run completed successfully.
+  </Step>
+
+  <Step title="✅ Connections Active">
+    All required connections are authenticated.
+  </Step>
+
+  <Step title="✅ Error Handling Configured">
+    Critical steps have retry/continue on failure set.
+  </Step>
+
+  <Step title="✅ Changes Saved">
+    No unsaved changes indicator.
+  </Step>
+
+  <Step title="✅ Click Publish">
+    Publish button clicked and confirmed.
+  </Step>
+
+  <Step title="✅ Enable Flow">
+    Toggle switched to enabled.
+  </Step>
+
+  <Step title="✅ Verify Running">
+    Flow shows as active/enabled in list.
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Publish Button Disabled">
+    **Reasons:**
+    - Flow has validation errors
+    - No changes to publish
+    - Currently saving
+    
+    **Solution:** Fix validation errors shown in red on steps.
+  </Accordion>
+
+  <Accordion title="Toggle Disabled After Publishing">
+    **Reason:** Flow publishing operation still in progress.
+    
+    **Solution:** Wait a few seconds for `operationStatus` to become `NONE`.
+  </Accordion>
+
+  <Accordion title="Flow Not Executing After Enabling">
+    **Possible causes:**
+    - Trigger not properly configured
+    - Webhook not registered
+    - Schedule not created
+    
+    **Solution:** 
+    - Disable and re-enable the flow
+    - Check trigger configuration
+    - Review trigger logs
+  </Accordion>
+
+  <Accordion title="Test Flow Button Disabled">
+    **Reason:** Trigger doesn't have sample data.
+    
+    **Solution:** Test the trigger first to generate sample data.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Versioning" icon="clock-rotate-left" href="/workflows/versioning">
+    Learn about version management
+  </Card>
+  <Card title="Debugging" icon="bug" href="/workflows/debugging">
+    Debug production issues
+  </Card>
+  <Card title="Monitoring" icon="chart-line" href="/workflows/debugging">
+    Monitor workflow performance
+  </Card>
+  <Card title="Best Practices" icon="star" href="/workflows/building-flows">
+    Workflow best practices
+  </Card>
+</CardGroup>

@@ -1,0 +1,650 @@
+---
+title: 'Projects API'
+description: 'Manage projects and team workspaces programmatically'
+icon: 'folder'
+---
+
+## Overview
+
+The Projects API allows you to create and manage projects (workspaces) within your platform. Projects are isolated environments where flows, connections, and runs are organized. Each project can have multiple users and its own configuration.
+
+## Base Endpoint
+
+```
+GET    /api/v1/projects
+POST   /api/v1/projects
+GET    /api/v1/projects/:id
+POST   /api/v1/projects/:id
+DELETE /api/v1/projects/:id
+```
+
+## List Projects
+
+Retrieve a paginated list of projects for your platform.
+
+```bash
+curl https://cloud.activepieces.com/api/v1/projects \
+  -H "Authorization: Bearer sk-your-api-key"
+```
+
+### Query Parameters
+
+<ParamField query="externalId" type="string">
+  Filter by external ID (useful for integration with external systems)
+</ParamField>
+
+<ParamField query="displayName" type="string">
+  Search projects by name (partial match)
+</ParamField>
+
+<ParamField query="types" type="array">
+  Filter by project type: `TEAM`, `PERSONAL`
+</ParamField>
+
+<ParamField query="limit" type="number" default="50">
+  Number of projects to return (1-100)
+</ParamField>
+
+<ParamField query="cursor" type="string">
+  Pagination cursor from previous response
+</ParamField>
+
+### Response
+
+<ResponseField name="data" type="array">
+  Array of project objects with limits and analytics
+  
+  <Expandable title="Project Object">
+    <ResponseField name="id" type="string">
+      Unique identifier for the project
+    </ResponseField>
+    
+    <ResponseField name="ownerId" type="string">
+      User ID of the project owner
+    </ResponseField>
+    
+    <ResponseField name="displayName" type="string">
+      Display name of the project
+    </ResponseField>
+    
+    <ResponseField name="platformId" type="string">
+      Platform ID this project belongs to
+    </ResponseField>
+    
+    <ResponseField name="type" type="enum">
+      Project type: `TEAM` or `PERSONAL`
+    </ResponseField>
+    
+    <ResponseField name="externalId" type="string">
+      External identifier for integration with other systems
+    </ResponseField>
+    
+    <ResponseField name="maxConcurrentJobs" type="number">
+      Maximum number of concurrent flow runs allowed
+    </ResponseField>
+    
+    <ResponseField name="releasesEnabled" type="boolean">
+      Whether git-based releases are enabled
+    </ResponseField>
+    
+    <ResponseField name="metadata" type="object">
+      Custom metadata attached to the project
+    </ResponseField>
+    
+    <ResponseField name="icon" type="object">
+      Project icon configuration
+      
+      <ResponseField name="color" type="enum">
+        Icon color: `RED`, `BLUE`, `YELLOW`, `PURPLE`, `GREEN`, `PINK`, `VIOLET`, `ORANGE`, `DARK_GREEN`, `CYAN`, `LAVENDER`, `DEEP_ORANGE`
+      </ResponseField>
+    </ResponseField>
+    
+    <ResponseField name="plan" type="object">
+      Project plan configuration
+      
+      <ResponseField name="piecesFilterType" type="enum">
+        How pieces (integrations) are filtered: `NONE`, `ALLOWED`
+      </ResponseField>
+      
+      <ResponseField name="pieces" type="array">
+        List of allowed piece names (when filter type is ALLOWED)
+      </ResponseField>
+      
+      <ResponseField name="locked" type="boolean">
+        Whether the plan is locked from editing
+      </ResponseField>
+    </ResponseField>
+    
+    <ResponseField name="analytics" type="object">
+      Project usage analytics
+      
+      <ResponseField name="totalUsers" type="number">
+        Total number of users in the project
+      </ResponseField>
+      
+      <ResponseField name="activeUsers" type="number">
+        Number of active users
+      </ResponseField>
+      
+      <ResponseField name="totalFlows" type="number">
+        Total number of flows
+      </ResponseField>
+      
+      <ResponseField name="activeFlows" type="number">
+        Number of enabled flows
+      </ResponseField>
+    </ResponseField>
+    
+    <ResponseField name="created" type="string">
+      ISO 8601 timestamp of creation
+    </ResponseField>
+    
+    <ResponseField name="updated" type="string">
+      ISO 8601 timestamp of last update
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="next" type="string">
+  Cursor for next page
+</ResponseField>
+
+<ResponseField name="previous" type="string">
+  Cursor for previous page
+</ResponseField>
+
+```json Response Example
+{
+  "data": [
+    {
+      "id": "project_abc123",
+      "ownerId": "user_xyz789",
+      "displayName": "Marketing Automation",
+      "platformId": "platform_456",
+      "type": "TEAM",
+      "externalId": "ext_marketing_01",
+      "maxConcurrentJobs": 10,
+      "releasesEnabled": true,
+      "metadata": {
+        "department": "marketing",
+        "region": "us-west"
+      },
+      "icon": {
+        "color": "BLUE"
+      },
+      "plan": {
+        "id": "plan_123",
+        "projectId": "project_abc123",
+        "name": "Team Plan",
+        "piecesFilterType": "ALLOWED",
+        "pieces": ["@activepieces/piece-slack", "@activepieces/piece-gmail"],
+        "locked": false,
+        "created": "2024-01-10T10:00:00.000Z",
+        "updated": "2024-01-10T10:00:00.000Z"
+      },
+      "analytics": {
+        "totalUsers": 8,
+        "activeUsers": 5,
+        "totalFlows": 24,
+        "activeFlows": 18
+      },
+      "created": "2024-01-10T10:00:00.000Z",
+      "updated": "2024-01-15T14:30:00.000Z"
+    }
+  ],
+  "next": null,
+  "previous": null
+}
+```
+
+## Create Project
+
+Create a new team project on your platform.
+
+```bash
+curl -X POST https://cloud.activepieces.com/api/v1/projects \
+  -H "Authorization: Bearer sk-your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "displayName": "Sales Team",
+    "externalId": "ext_sales_01",
+    "maxConcurrentJobs": 5
+  }'
+```
+
+### Request Body
+
+<ParamField body="displayName" type="string" required>
+  Name of the project. Must match pattern: alphanumeric, spaces, hyphens, underscores only
+</ParamField>
+
+<ParamField body="externalId" type="string">
+  External identifier for integration. Must be unique across the platform
+</ParamField>
+
+<ParamField body="metadata" type="object">
+  Custom metadata to store with the project
+</ParamField>
+
+<ParamField body="maxConcurrentJobs" type="number">
+  Maximum number of flow runs that can execute concurrently
+</ParamField>
+
+<ParamField body="globalConnectionExternalIds" type="array">
+  Array of global connection external IDs to pre-assign to this project
+</ParamField>
+
+### Response
+
+Returns the created project with plan and analytics (status code 201).
+
+<Note>
+**Project Types:**
+
+- `PERSONAL` - Automatically created for each user, cannot be deleted
+- `TEAM` - Created via API or UI, can have multiple members
+
+You can only create TEAM projects via the API.
+</Note>
+
+## Get Project
+
+Retrieve details about a specific project.
+
+```bash
+curl https://cloud.activepieces.com/api/v1/projects/project_abc123 \
+  -H "Authorization: Bearer sk-your-api-key"
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The project ID
+</ParamField>
+
+### Response
+
+Returns the project object with plan and analytics.
+
+## Update Project
+
+Update project configuration and settings.
+
+```bash
+curl -X POST https://cloud.activepieces.com/api/v1/projects/project_abc123 \
+  -H "Authorization: Bearer sk-your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "displayName": "Sales & Marketing",
+    "releasesEnabled": true,
+    "plan": {
+      "piecesFilterType": "ALLOWED",
+      "pieces": ["@activepieces/piece-slack", "@activepieces/piece-hubspot"]
+    }
+  }'
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The project ID
+</ParamField>
+
+### Request Body
+
+<ParamField body="displayName" type="string">
+  New display name for the project
+</ParamField>
+
+<ParamField body="externalId" type="string">
+  Update external ID (platform admins only)
+</ParamField>
+
+<ParamField body="metadata" type="object">
+  Update custom metadata
+</ParamField>
+
+<ParamField body="releasesEnabled" type="boolean">
+  Enable or disable git-based releases
+</ParamField>
+
+<ParamField body="icon" type="object">
+  Update project icon
+  
+  <ParamField body="icon.color" type="enum">
+    Icon color name
+  </ParamField>
+</ParamField>
+
+<ParamField body="plan" type="object">
+  Update project plan settings
+  
+  <ParamField body="plan.piecesFilterType" type="enum">
+    Set to `ALLOWED` to whitelist pieces, or `NONE` to allow all
+  </ParamField>
+  
+  <ParamField body="plan.pieces" type="array">
+    Array of allowed piece names (when filter type is ALLOWED)
+  </ParamField>
+</ParamField>
+
+<ParamField body="globalConnectionExternalIds" type="array">
+  Update global connections assigned to this project
+</ParamField>
+
+### Response
+
+Returns the updated project object.
+
+<Warning>
+**Authorization Note:**
+
+Only platform admins can update `externalId`. Regular project members with appropriate permissions can update other fields.
+</Warning>
+
+## Delete Project
+
+Permanently delete a team project.
+
+```bash
+curl -X DELETE https://cloud.activepieces.com/api/v1/projects/project_abc123 \
+  -H "Authorization: Bearer sk-your-api-key"
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The project ID to delete
+</ParamField>
+
+### Response
+
+Returns `204 No Content` on successful deletion.
+
+<Warning>
+**Deletion Restrictions:**
+
+- Personal projects cannot be deleted
+- Only platform admins can delete projects
+- Deletion is permanent and cannot be undone
+- All flows, runs, and connections in the project will be deleted
+</Warning>
+
+## Project Plan Limits
+
+Projects can have different plan limits based on your platform edition:
+
+### Team Projects Limits
+
+| Edition | Team Projects Allowed |
+|---------|----------------------|
+| Community | None (requires upgrade) |
+| Pro | 1 team project |
+| Enterprise | Unlimited |
+
+Attempting to create more team projects than allowed will result in an error:
+
+```json
+{
+  "statusCode": 400,
+  "code": "FEATURE_DISABLED",
+  "params": {
+    "message": "Maximum limit of 1 team project reached for this plan. Upgrade your plan to add more team projects."
+  }
+}
+```
+
+## Pieces Filter (Integrations Control)
+
+Control which integrations (pieces) are available in a project:
+
+### Allow All Pieces
+
+```json
+{
+  "plan": {
+    "piecesFilterType": "NONE"
+  }
+}
+```
+
+### Whitelist Specific Pieces
+
+```json
+{
+  "plan": {
+    "piecesFilterType": "ALLOWED",
+    "pieces": [
+      "@activepieces/piece-slack",
+      "@activepieces/piece-gmail",
+      "@activepieces/piece-sheets"
+    ]
+  }
+}
+```
+
+<Tip>
+Use piece filtering to:
+- Restrict integrations for security/compliance
+- Simplify the UI for specific teams
+- Control costs for paid integrations
+</Tip>
+
+## Global Connections
+
+Assign platform-level (global) connections to projects:
+
+```json
+{
+  "globalConnectionExternalIds": [
+    "ext_conn_shared_slack",
+    "ext_conn_company_gmail"
+  ]
+}
+```
+
+Global connections:
+- Are managed at the platform level
+- Can be shared across multiple projects
+- Useful for company-wide integrations
+- Reduce duplicate connection setup
+
+## Concurrent Jobs Limit
+
+Control resource usage by limiting concurrent flow runs:
+
+```json
+{
+  "maxConcurrentJobs": 10
+}
+```
+
+- Set to `null` for unlimited concurrent jobs
+- Use limits to prevent resource exhaustion
+- Runs exceeding the limit are queued
+
+## Error Responses
+
+### Project Not Found (404)
+
+```json
+{
+  "statusCode": 404,
+  "code": "ENTITY_NOT_FOUND",
+  "params": {
+    "entityType": "project",
+    "entityId": "project_abc123",
+    "message": "Project not found"
+  }
+}
+```
+
+### Cannot Delete Personal Project (400)
+
+```json
+{
+  "statusCode": 400,
+  "code": "VALIDATION",
+  "params": {
+    "message": "Personal projects cannot be deleted"
+  }
+}
+```
+
+### Team Projects Limit Reached (400)
+
+```json
+{
+  "statusCode": 400,
+  "code": "FEATURE_DISABLED",
+  "params": {
+    "message": "Maximum limit of 1 team project reached for this plan."
+  }
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Project Organization">
+    - Use TEAM projects for departments or product lines
+    - Set meaningful `displayName` values
+    - Use `metadata` to store organizational info (cost center, owner email)
+    - Leverage `externalId` for integration with external systems
+  </Accordion>
+  
+  <Accordion title="Resource Management">
+    - Set `maxConcurrentJobs` based on expected load
+    - Monitor analytics to track usage
+    - Use piece filtering to control integration sprawl
+    - Regularly review and archive inactive projects
+  </Accordion>
+  
+  <Accordion title="Security & Governance">
+    - Use piece filtering to enforce allowed integrations
+    - Assign global connections for sensitive credentials
+    - Enable `releasesEnabled` for version-controlled deployments
+    - Document project purpose in metadata
+  </Accordion>
+  
+  <Accordion title="Multi-tenancy">
+    - Use one project per customer/tenant
+    - Set unique `externalId` for each tenant
+    - Store tenant metadata in project metadata
+    - Configure appropriate concurrent job limits per tenant
+  </Accordion>
+</AccordionGroup>
+
+## Code Examples
+
+<CodeGroup>
+```typescript Node.js
+import axios from 'axios';
+
+const client = axios.create({
+  baseURL: 'https://cloud.activepieces.com/api/v1',
+  headers: {
+    'Authorization': `Bearer ${process.env.ACTIVEPIECES_API_KEY}`
+  }
+});
+
+// Create a new team project
+const project = await client.post('/projects', {
+  displayName: 'Customer Support',
+  externalId: 'ext_support_team',
+  maxConcurrentJobs: 15,
+  metadata: {
+    department: 'support',
+    tier: 'premium'
+  }
+});
+
+console.log('Created project:', project.data.id);
+
+// Configure allowed integrations
+await client.post(`/projects/${project.data.id}`, {
+  plan: {
+    piecesFilterType: 'ALLOWED',
+    pieces: [
+      '@activepieces/piece-slack',
+      '@activepieces/piece-zendesk',
+      '@activepieces/piece-gmail'
+    ]
+  }
+});
+
+console.log('Configured integrations');
+
+// Get project analytics
+const updated = await client.get(`/projects/${project.data.id}`);
+console.log('Analytics:', updated.data.analytics);
+```
+
+```python Python
+import requests
+import os
+
+API_KEY = os.environ['ACTIVEPIECES_API_KEY']
+BASE_URL = 'https://cloud.activepieces.com/api/v1'
+
+headers = {
+    'Authorization': f'Bearer {API_KEY}',
+    'Content-Type': 'application/json'
+}
+
+# Create a new team project
+response = requests.post(
+    f'{BASE_URL}/projects',
+    headers=headers,
+    json={
+        'displayName': 'Customer Support',
+        'externalId': 'ext_support_team',
+        'maxConcurrentJobs': 15,
+        'metadata': {
+            'department': 'support',
+            'tier': 'premium'
+        }
+    }
+)
+
+project = response.json()
+print(f"Created project: {project['id']}")
+
+# Configure allowed integrations
+requests.post(
+    f"{BASE_URL}/projects/{project['id']}",
+    headers=headers,
+    json={
+        'plan': {
+            'piecesFilterType': 'ALLOWED',
+            'pieces': [
+                '@activepieces/piece-slack',
+                '@activepieces/piece-zendesk',
+                '@activepieces/piece-gmail'
+            ]
+        }
+    }
+)
+
+print('Configured integrations')
+
+# Get project analytics
+updated = requests.get(f"{BASE_URL}/projects/{project['id']}", headers=headers)
+print(f"Analytics: {updated.json()['analytics']}")
+```
+</CodeGroup>
+
+## Project Members
+
+For managing project members, see the [Project Members API](/api/projects) documentation.
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Flows API" icon="diagram-project" href="/api/flows">
+    Manage flows within projects
+  </Card>
+  <Card title="Connections API" icon="link" href="/api/connections">
+    Manage project connections
+  </Card>
+</CardGroup>

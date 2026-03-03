@@ -1,0 +1,640 @@
+---
+title: Property Types
+description: Complete guide to all property types in Activepieces
+---
+
+## What are Properties?
+
+Properties are inputs that users configure for actions and triggers. They define what information is needed to execute your piece's functionality.
+
+## Property Types
+
+Activepieces provides rich property types for different kinds of input:
+
+<CardGroup cols={3}>
+  <Card title="Text" icon="font">
+    ShortText, LongText
+  </Card>
+  <Card title="Number" icon="hashtag">
+    Numeric input
+  </Card>
+  <Card title="Boolean" icon="toggle-on">
+    Checkbox
+  </Card>
+  <Card title="Selection" icon="list">
+    Dropdown, Multi-select
+  </Card>
+  <Card title="Date & Time" icon="calendar">
+    DateTime picker
+  </Card>
+  <Card title="Files" icon="file">
+    File uploads
+  </Card>
+  <Card title="Structured Data" icon="code">
+    JSON, Object, Array
+  </Card>
+  <Card title="Dynamic" icon="wand-magic-sparkles">
+    Dynamic properties
+  </Card>
+</CardGroup>
+
+## Text Properties
+
+### ShortText
+
+Single-line text input for names, IDs, URLs, etc.
+
+```typescript
+Property.ShortText({
+  displayName: 'Channel ID',
+  description: 'The Slack channel ID',
+  required: true,
+  defaultValue: 'general',
+})
+```
+
+<ParamField path="displayName" type="string" required>
+  Label shown to users
+</ParamField>
+
+<ParamField path="description" type="string">
+  Helper text explaining what to enter
+</ParamField>
+
+<ParamField path="required" type="boolean" default="false">
+  Whether the field is required
+</ParamField>
+
+<ParamField path="defaultValue" type="string">
+  Pre-filled default value
+</ParamField>
+
+### LongText
+
+Multi-line text input for messages, descriptions, etc.
+
+```typescript
+Property.LongText({
+  displayName: 'Message',
+  description: 'The message content',
+  required: true,
+})
+```
+
+## Number Property
+
+Numeric input with optional min/max validation.
+
+```typescript
+Property.Number({
+  displayName: 'Max Results',
+  description: 'Maximum number of results to return',
+  required: false,
+  defaultValue: 10,
+  validators: [
+    {
+      type: 'number',
+      min: 1,
+      max: 100,
+    },
+  ],
+})
+```
+
+<ParamField path="validators" type="Validator[]">
+  Validation rules for min/max values
+  
+  ```typescript
+  validators: [{
+    type: 'number',
+    min: 1,
+    max: 100,
+  }]
+  ```
+</ParamField>
+
+## Checkbox Property
+
+Boolean input for yes/no options.
+
+```typescript
+Property.Checkbox({
+  displayName: 'Include Metadata',
+  description: 'Include additional metadata in response',
+  required: true,
+  defaultValue: false,
+})
+```
+
+## Dropdown Properties
+
+### Static Dropdown
+
+Predefined list of options.
+
+```typescript
+Property.StaticDropdown({
+  displayName: 'Priority',
+  description: 'Issue priority level',
+  required: true,
+  options: {
+    options: [
+      { label: 'Low', value: 'low' },
+      { label: 'Medium', value: 'medium' },
+      { label: 'High', value: 'high' },
+      { label: 'Critical', value: 'critical' },
+    ],
+  },
+  defaultValue: 'medium',
+})
+```
+
+### Dynamic Dropdown
+
+Options loaded from API at runtime.
+
+```typescript
+Property.Dropdown({
+  displayName: 'Repository',
+  description: 'Select a repository',
+  required: true,
+  refreshers: [], // Refresh when these properties change
+  
+  // Function to fetch options
+  options: async ({ auth }) => {
+    const response = await fetch('https://api.github.com/user/repos', {
+      headers: {
+        'Authorization': `Bearer ${auth.access_token}`,
+      },
+    });
+    
+    const repos = await response.json();
+    
+    return {
+      options: repos.map((repo) => ({
+        label: repo.full_name,
+        value: repo.id,
+      })),
+    };
+  },
+})
+```
+
+<ParamField path="refreshers" type="string[]">
+  Property names that trigger a refresh when changed
+  
+  ```typescript
+  // Refresh channels when workspace changes
+  refreshers: ['workspace']
+  ```
+</ParamField>
+
+<ParamField path="refreshOnSearch" type="boolean">
+  Re-fetch options when user types in search
+</ParamField>
+
+### Multi-Select Dropdown
+
+Allow selecting multiple options.
+
+```typescript
+Property.StaticMultiSelectDropdown({
+  displayName: 'Labels',
+  description: 'Select one or more labels',
+  required: false,
+  options: {
+    options: [
+      { label: 'Bug', value: 'bug' },
+      { label: 'Feature', value: 'feature' },
+      { label: 'Documentation', value: 'docs' },
+    ],
+  },
+})
+```
+
+## DateTime Property
+
+Date and time picker.
+
+```typescript
+Property.DateTime({
+  displayName: 'Due Date',
+  description: 'When the task is due',
+  required: false,
+})
+```
+
+Returns ISO 8601 format: `2024-01-15T10:30:00Z`
+
+## File Property
+
+File upload input.
+
+```typescript
+Property.File({
+  displayName: 'Attachment',
+  description: 'File to upload',
+  required: false,
+})
+```
+
+Returns file object:
+```typescript
+{
+  filename: 'document.pdf',
+  extension: 'pdf',
+  data: Buffer,
+  base64: 'base64string...',
+}
+```
+
+## JSON Property
+
+JSON input with validation.
+
+```typescript
+Property.Json({
+  displayName: 'Metadata',
+  description: 'Additional metadata as JSON',
+  required: false,
+  defaultValue: {
+    key: 'value',
+  },
+})
+```
+
+## Object Property
+
+Key-value pairs.
+
+```typescript
+Property.Object({
+  displayName: 'Headers',
+  description: 'HTTP headers as key-value pairs',
+  required: false,
+})
+```
+
+Returns:
+```typescript
+{
+  'Content-Type': 'application/json',
+  'Authorization': 'Bearer token',
+}
+```
+
+## Array Property
+
+Array of values with specified type.
+
+```typescript
+Property.Array({
+  displayName: 'Tags',
+  description: 'List of tags',
+  required: false,
+  properties: {
+    tag: Property.ShortText({
+      displayName: 'Tag',
+      required: true,
+    }),
+  },
+})
+```
+
+## Dynamic Properties
+
+Properties that change based on other property values.
+
+```typescript
+Property.DynamicProperties({
+  displayName: 'Event Fields',
+  description: 'Fields for the selected event',
+  required: true,
+  refreshers: ['eventType'], // Refresh when eventType changes
+  
+  props: async ({ auth, eventType }) => {
+    if (!eventType) {
+      return {};
+    }
+    
+    // Fetch field definitions for selected event type
+    const response = await fetch(
+      `https://api.example.com/events/${eventType}/fields`,
+      {
+        headers: {
+          'Authorization': `Bearer ${auth.access_token}`,
+        },
+      }
+    );
+    
+    const fields = await response.json();
+    
+    // Build properties dynamically
+    const properties = {};
+    
+    for (const field of fields) {
+      properties[field.name] = Property.ShortText({
+        displayName: field.label,
+        description: field.description,
+        required: field.required,
+      });
+    }
+    
+    return properties;
+  },
+})
+```
+
+## Markdown Property
+
+Display formatted text (not an input).
+
+```typescript
+Property.MarkDown({
+  value: `
+### Setup Instructions
+
+1. Go to your account settings
+2. Navigate to API section
+3. Generate a new API key
+4. Copy the key and paste it above
+  `,
+})
+```
+
+## Custom Property
+
+Build completely custom UI components.
+
+```typescript
+Property.Custom({
+  displayName: 'Custom Input',
+  required: true,
+  code: `
+    export function main(props) {
+      // Custom React component
+      return (
+        <div>
+          <input 
+            type="text" 
+            value={props.value}
+            onChange={(e) => props.onChange(e.target.value)}
+          />
+        </div>
+      );
+    }
+  `,
+})
+```
+
+## Property Validation
+
+Add validation to ensure correct input:
+
+<Tabs>
+  <Tab title="Number Validation">
+    ```typescript
+    Property.Number({
+      displayName: 'Quantity',
+      required: true,
+      validators: [
+        {
+          type: 'number',
+          min: 1,
+          max: 1000,
+        },
+      ],
+    })
+    ```
+  </Tab>
+
+  <Tab title="Text Pattern">
+    ```typescript
+    Property.ShortText({
+      displayName: 'Email',
+      required: true,
+      validators: [
+        {
+          type: 'string',
+          pattern: '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$',
+        },
+      ],
+    })
+    ```
+  </Tab>
+
+  <Tab title="Custom Validation">
+    ```typescript
+    // Validate in action run function
+    async run(context) {
+      const email = context.propsValue.email;
+      
+      if (!email.includes('@')) {
+        throw new Error('Invalid email address');
+      }
+      
+      // Continue with logic
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Real-World Examples
+
+<AccordionGroup>
+  <Accordion title="Slack Channel Selector">
+    ```typescript
+    Property.Dropdown({
+      displayName: 'Channel',
+      description: 'Select a Slack channel',
+      required: true,
+      refreshers: [],
+      options: async ({ auth }) => {
+        const response = await fetch(
+          'https://slack.com/api/conversations.list',
+          {
+            headers: {
+              'Authorization': `Bearer ${auth.access_token}`,
+            },
+          }
+        );
+        
+        const data = await response.json();
+        
+        return {
+          options: data.channels
+            .filter(ch => !ch.is_archived)
+            .map(ch => ({
+              label: `#${ch.name}`,
+              value: ch.id,
+            })),
+        };
+      },
+    })
+    ```
+  </Accordion>
+
+  <Accordion title="GitHub Repository with Dynamic Fields">
+    ```typescript
+    props: {
+      repository: Property.Dropdown({
+        displayName: 'Repository',
+        required: true,
+        refreshers: [],
+        options: async ({ auth }) => {
+          const repos = await fetchRepos(auth);
+          return {
+            options: repos.map(r => ({
+              label: r.full_name,
+              value: r.id,
+            })),
+          };
+        },
+      }),
+      
+      issueFields: Property.DynamicProperties({
+        displayName: 'Issue Fields',
+        required: true,
+        refreshers: ['repository'],
+        props: async ({ auth, repository }) => {
+          if (!repository) return {};
+          
+          // Get custom fields for this repository
+          const fields = await fetchCustomFields(auth, repository);
+          
+          const props = {};
+          for (const field of fields) {
+            props[field.key] = Property.ShortText({
+              displayName: field.name,
+              required: field.required,
+            });
+          }
+          
+          return props;
+        },
+      }),
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="File Upload with Metadata">
+    ```typescript
+    props: {
+      file: Property.File({
+        displayName: 'File',
+        description: 'File to upload',
+        required: true,
+      }),
+      
+      visibility: Property.StaticDropdown({
+        displayName: 'Visibility',
+        required: true,
+        options: {
+          options: [
+            { label: 'Private', value: 'private' },
+            { label: 'Team', value: 'team' },
+            { label: 'Public', value: 'public' },
+          ],
+        },
+        defaultValue: 'private',
+      }),
+      
+      tags: Property.Array({
+        displayName: 'Tags',
+        required: false,
+        properties: {
+          tag: Property.ShortText({
+            displayName: 'Tag',
+            required: true,
+          }),
+        },
+      }),
+      
+      metadata: Property.Json({
+        displayName: 'Custom Metadata',
+        required: false,
+        defaultValue: {},
+      }),
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Appropriate Property Types">
+    Choose the right property type for the data:
+    
+    - **Email/URL**: ShortText with validation
+    - **Description**: LongText
+    - **Selection from list**: Dropdown
+    - **Multiple selections**: MultiSelectDropdown
+    - **Yes/No**: Checkbox
+    - **Structured data**: JSON or Object
+  </Accordion>
+
+  <Accordion title="Provide Clear Descriptions">
+    Help users understand what to enter:
+    
+    ```typescript
+    Property.ShortText({
+      displayName: 'API Key',
+      description: 'Find your API key at https://example.com/settings/api',
+      required: true,
+    })
+    ```
+  </Accordion>
+
+  <Accordion title="Set Sensible Defaults">
+    Pre-fill common values:
+    
+    ```typescript
+    Property.Number({
+      displayName: 'Timeout (seconds)',
+      defaultValue: 30,
+      required: false,
+    })
+    ```
+  </Accordion>
+
+  <Accordion title="Use Refreshers for Dependencies">
+    Refresh dependent dropdowns:
+    
+    ```typescript
+    Property.Dropdown({
+      displayName: 'Database',
+      refreshers: ['connection'], // Refresh when connection changes
+      options: async ({ connection }) => {
+        // Fetch databases for selected connection
+      },
+    })
+    ```
+  </Accordion>
+
+  <Accordion title="Validate Critical Inputs">
+    Add validation for important fields:
+    
+    ```typescript
+    Property.Number({
+      displayName: 'Port',
+      validators: [{
+        type: 'number',
+        min: 1,
+        max: 65535,
+      }],
+    })
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Create Actions" href="/pieces/create-action" icon="play">
+    Use properties in your actions
+  </Card>
+  <Card title="Testing" href="/pieces/testing" icon="flask">
+    Test property validation
+  </Card>
+</CardGroup>

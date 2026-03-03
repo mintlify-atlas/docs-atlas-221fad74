@@ -1,0 +1,308 @@
+---
+title: Building Workflows
+description: Learn how to build workflows using the visual flow builder interface
+icon: 'hammer'
+---
+
+Activepieces provides a powerful visual flow builder that lets you create automation workflows by connecting triggers and actions together. This guide walks you through building your first workflow.
+
+## Understanding Flow Structure
+
+Every workflow in Activepieces consists of:
+
+- **Trigger**: The event that starts your workflow (webhook, schedule, app event)
+- **Actions**: The steps that execute when the trigger fires
+- **Flow Version**: Each flow has versions you can publish or keep as drafts
+
+<Note>
+Flows can have two states: `ENABLED` (running in production) or `DISABLED` (paused).
+</Note>
+
+## Creating Your First Flow
+
+<Steps>
+  <Step title="Start a New Flow">
+    Navigate to your project and click the **New Flow** button. You'll be taken to the visual flow builder with an empty trigger.
+
+    ```typescript
+    // Flow structure from the codebase
+    {
+      id: string,
+      projectId: string,
+      status: FlowStatus.ENABLED | FlowStatus.DISABLED,
+      publishedVersionId: string | null,
+      version: FlowVersion
+    }
+    ```
+  </Step>
+
+  <Step title="Configure the Trigger">
+    Click on the trigger node to select how your workflow will start:
+
+    <Tabs>
+      <Tab title="Webhook Trigger">
+        Create an HTTP endpoint that receives data from external services.
+
+        ```json
+        {
+          "type": "PIECE",
+          "settings": {
+            "pieceName": "@activepieces/piece-webhook",
+            "triggerName": "catch_webhook"
+          }
+        }
+        ```
+      </Tab>
+
+      <Tab title="Schedule Trigger">
+        Run your workflow on a schedule using cron expressions.
+
+        ```json
+        {
+          "type": "PIECE",
+          "settings": {
+            "pieceName": "@activepieces/piece-schedule",
+            "triggerName": "every_hour"
+          }
+        }
+        ```
+      </Tab>
+
+      <Tab title="App Trigger">
+        Start workflows based on events from connected apps (new email, new row, etc.).
+
+        ```json
+        {
+          "type": "PIECE",
+          "settings": {
+            "pieceName": "@activepieces/piece-gmail",
+            "triggerName": "new_email"
+          }
+        }
+        ```
+      </Tab>
+    </Tabs>
+
+    <Warning>
+    Your trigger must be configured and valid before you can test or publish the workflow.
+    </Warning>
+  </Step>
+
+  <Step title="Add Actions">
+    Click the **+** button below your trigger to add actions. Actions are executed sequentially.
+
+    ### Action Types
+
+    <CardGroup cols={2}>
+      <Card title="Piece Action" icon="puzzle-piece">
+        Use pre-built integrations with popular apps and services.
+      </Card>
+      <Card title="Code Action" icon="code">
+        Write custom TypeScript/JavaScript code for complex logic.
+      </Card>
+      <Card title="Loop Action" icon="rotate">
+        Iterate over arrays and process items one by one.
+      </Card>
+      <Card title="Router Action" icon="code-branch">
+        Add conditional branches to your workflow.
+      </Card>
+    </CardGroup>
+
+    ### Adding a Piece Action
+
+    ```typescript
+    {
+      "name": "send_email",
+      "type": "PIECE",
+      "displayName": "Send Email",
+      "settings": {
+        "pieceName": "@activepieces/piece-gmail",
+        "pieceVersion": "^0.1.0",
+        "actionName": "send_email",
+        "input": {
+          "to": "user@example.com",
+          "subject": "New notification",
+          "body": "Hello from Activepieces!"
+        }
+      }
+    }
+    ```
+
+    ### Adding a Code Action
+
+    ```typescript
+    {
+      "name": "transform_data",
+      "type": "CODE",
+      "displayName": "Transform Data",
+      "settings": {
+        "sourceCode": {
+          "code": "export const code = async (inputs) => { return inputs.data.toUpperCase(); }",
+          "packageJson": "{}"
+        },
+        "input": {
+          "data": "hello world"
+        }
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Connect Steps">
+    Steps are automatically connected in sequence. You can:
+
+    - **Drag and drop** steps to reorder them
+    - **Insert steps** between existing actions
+    - **Delete steps** by clicking the delete icon
+
+    <Note>
+    Each step can access data from previous steps using variable expressions.
+    </Note>
+  </Step>
+
+  <Step title="Test Your Flow">
+    Before publishing, test your workflow:
+
+    1. Ensure your trigger has sample data
+    2. Click the **Test Flow** button above the trigger
+    3. Review the execution results for each step
+
+    ```typescript
+    // Test flow execution from packages/web/src/app/builder/flow-canvas/widgets/test-flow-widget.tsx
+    const { mutate: runFlow } = flowHooks.useTestFlowOrStartManualTrigger({
+      flowVersionId: flowVersion.id,
+      onUpdateRun: (response) => {
+        // Updates run state with step outputs
+        setRun(response.flowRun, flowVersion);
+      }
+    });
+    ```
+  </Step>
+</Steps>
+
+## Flow Builder Interface
+
+The visual flow builder provides:
+
+### Canvas Navigation
+
+- **Zoom**: Use mouse wheel or zoom controls
+- **Pan**: Click and drag the canvas
+- **Fit to view**: Auto-zoom to see all steps
+
+### Step Configuration
+
+Click any step to open the configuration panel:
+
+- **Display Name**: Friendly name shown on canvas
+- **Step Name**: Unique identifier (e.g., `step_1`, `send_email`)
+- **Settings**: Action-specific configuration
+- **Error Handling**: Configure retry and failure behavior
+
+### Step Validation
+
+```typescript
+// From packages/shared/src/lib/automation/flows/flow-version.ts
+export type FlowVersion = {
+  id: string,
+  flowId: string,
+  displayName: string,
+  trigger: FlowTrigger,
+  valid: boolean,  // All steps must be valid
+  state: FlowVersionState.DRAFT | FlowVersionState.LOCKED
+}
+```
+
+Steps show validation indicators:
+
+- ✅ **Green**: Step is valid and ready
+- ⚠️ **Yellow**: Step needs configuration
+- ❌ **Red**: Step has errors
+
+## Advanced Features
+
+### Skip Conditions
+
+You can skip a step based on conditions:
+
+```typescript
+{
+  "name": "optional_step",
+  "skip": true,  // Dynamically set to skip execution
+  "settings": { /* ... */ }
+}
+```
+
+### Error Handling
+
+Configure how each step handles failures:
+
+```typescript
+{
+  "errorHandlingOptions": {
+    "continueOnFailure": {
+      "value": true  // Continue flow even if this step fails
+    },
+    "retryOnFailure": {
+      "value": true  // Retry step on failure
+    }
+  }
+}
+```
+
+### Custom Logos
+
+Customize step appearance:
+
+```typescript
+{
+  "settings": {
+    "customLogoUrl": "https://example.com/logo.png"
+  }
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Descriptive Names">
+    Give your flows and steps meaningful names that describe what they do.
+
+    ```typescript
+    // Good
+    displayName: "Send Welcome Email to New Users"
+    
+    // Bad
+    displayName: "Flow 1"
+    ```
+  </Accordion>
+
+  <Accordion title="Test Before Publishing">
+    Always test your workflow with real data before enabling it in production.
+  </Accordion>
+
+  <Accordion title="Start Simple">
+    Build workflows incrementally. Test each step before adding the next one.
+  </Accordion>
+
+  <Accordion title="Use Error Handling">
+    Configure error handling for critical steps to make your flows resilient.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Passing Data" icon="arrow-right-arrow-left" href="/workflows/passing-data">
+    Learn how to pass data between steps
+  </Card>
+  <Card title="Loops & Branches" icon="code-branch" href="/workflows/loops-branches">
+    Add control flow to your workflows
+  </Card>
+  <Card title="Publishing" icon="rocket" href="/workflows/publishing">
+    Publish and enable your workflows
+  </Card>
+  <Card title="Error Handling" icon="shield" href="/workflows/error-handling">
+    Handle errors gracefully
+  </Card>
+</CardGroup>

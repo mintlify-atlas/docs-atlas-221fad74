@@ -1,0 +1,700 @@
+---
+title: Environment Variables
+description: Complete reference for all Activepieces environment variables
+---
+
+Activepieces is configured entirely through environment variables prefixed with `AP_`. All variables are defined in the source code at `packages/server/common/src/lib/system-props.ts`.
+
+<Info>
+Environment variables are read from the `.env` file or passed directly to the container. The `.env.example` file in the repository shows the minimum required configuration.
+</Info>
+
+## Quick Reference
+
+Download the example configuration:
+
+```bash
+curl -O https://raw.githubusercontent.com/activepieces/activepieces/main/.env.example
+```
+
+## Required Variables
+
+These must be set for Activepieces to function:
+
+<ParamField path="AP_ENGINE_EXECUTABLE_PATH" type="string" required>
+  Path to the workflow execution engine
+  
+  **Default**: `dist/packages/engine/main.js`
+  
+  **Example**:
+  ```bash
+  AP_ENGINE_EXECUTABLE_PATH=dist/packages/engine/main.js
+  ```
+</ParamField>
+
+<ParamField path="AP_ENCRYPTION_KEY" type="string" required>
+  256-bit encryption key (32 hex characters) for encrypting sensitive data
+  
+  **Generate**:
+  ```bash
+  openssl rand -hex 32
+  ```
+  
+  <Warning>
+  Changing this key will make existing encrypted data unreadable. Store it securely and never commit to version control.
+  </Warning>
+</ParamField>
+
+<ParamField path="AP_JWT_SECRET" type="string" required>
+  Secret key for signing JWT authentication tokens
+  
+  **Generate**:
+  ```bash
+  openssl rand -hex 32
+  ```
+  
+  <Warning>
+  Changing this will invalidate all existing user sessions.
+  </Warning>
+</ParamField>
+
+<ParamField path="AP_FRONTEND_URL" type="string" required>
+  Public URL where users access Activepieces
+  
+  **Examples**:
+  ```bash
+  # Development
+  AP_FRONTEND_URL=http://localhost:8080
+  
+  # Production
+  AP_FRONTEND_URL=https://activepieces.yourdomain.com
+  ```
+</ParamField>
+
+## Database Configuration
+
+### PostgreSQL
+
+<ParamField path="AP_POSTGRES_DATABASE" type="string" default="activepieces">
+  PostgreSQL database name
+</ParamField>
+
+<ParamField path="AP_POSTGRES_HOST" type="string" default="postgres">
+  PostgreSQL server hostname
+  
+  **Examples**:
+  ```bash
+  # Docker Compose
+  AP_POSTGRES_HOST=postgres
+  
+  # External server
+  AP_POSTGRES_HOST=db.example.com
+  ```
+</ParamField>
+
+<ParamField path="AP_POSTGRES_PORT" type="number" default="5432">
+  PostgreSQL server port
+</ParamField>
+
+<ParamField path="AP_POSTGRES_USERNAME" type="string" default="postgres">
+  PostgreSQL username
+</ParamField>
+
+<ParamField path="AP_POSTGRES_PASSWORD" type="string" required>
+  PostgreSQL password
+  
+  <Warning>
+  Use a strong password for production deployments.
+  </Warning>
+</ParamField>
+
+<ParamField path="AP_POSTGRES_URL" type="string">
+  PostgreSQL connection URL (alternative to individual settings)
+  
+  **Format**: `postgresql://username:password@host:port/database`
+  
+  **Example**:
+  ```bash
+  AP_POSTGRES_URL=postgresql://user:pass@localhost:5432/activepieces?sslmode=require
+  ```
+  
+  <Info>
+  If set, this overrides individual `AP_POSTGRES_*` variables.
+  </Info>
+</ParamField>
+
+<ParamField path="AP_POSTGRES_USE_SSL" type="boolean" default="false">
+  Enable SSL/TLS for PostgreSQL connection
+  
+  ```bash
+  AP_POSTGRES_USE_SSL=true
+  ```
+</ParamField>
+
+<ParamField path="AP_POSTGRES_SSL_CA" type="string">
+  Path to SSL CA certificate file
+  
+  ```bash
+  AP_POSTGRES_SSL_CA=/path/to/ca-certificate.crt
+  ```
+</ParamField>
+
+<ParamField path="AP_POSTGRES_POOL_SIZE" type="number" default="10">
+  PostgreSQL connection pool size
+  
+  **Recommended**: 10-20 for production
+</ParamField>
+
+<ParamField path="AP_POSTGRES_IDLE_TIMEOUT_MS" type="number" default="30000">
+  Connection idle timeout in milliseconds
+</ParamField>
+
+<ParamField path="AP_DB_TYPE" type="enum">
+  Database type (for advanced use cases)
+  
+  **Options**: `postgres`, `sqlite`
+  
+  <Warning>
+  SQLite is for development only. Use PostgreSQL for production.
+  </Warning>
+</ParamField>
+
+## Redis Configuration
+
+<ParamField path="AP_REDIS_HOST" type="string" default="redis">
+  Redis server hostname
+</ParamField>
+
+<ParamField path="AP_REDIS_PORT" type="number" default="6379">
+  Redis server port
+</ParamField>
+
+<ParamField path="AP_REDIS_USER" type="string">
+  Redis username (Redis 6+ ACL)
+</ParamField>
+
+<ParamField path="AP_REDIS_PASSWORD" type="string">
+  Redis password
+</ParamField>
+
+<ParamField path="AP_REDIS_DB" type="number" default="0">
+  Redis database number (0-15)
+</ParamField>
+
+<ParamField path="AP_REDIS_URL" type="string">
+  Redis connection URL (alternative to individual settings)
+  
+  **Format**: `redis://[username:password@]host:port/db`
+  
+  **Example**:
+  ```bash
+  AP_REDIS_URL=redis://:password@redis:6379/0
+  ```
+</ParamField>
+
+<ParamField path="AP_REDIS_USE_SSL" type="boolean" default="false">
+  Enable SSL/TLS for Redis connection
+</ParamField>
+
+<ParamField path="AP_REDIS_SSL_CA_FILE" type="string">
+  Path to SSL CA certificate file
+</ParamField>
+
+<ParamField path="AP_REDIS_TYPE" type="enum" default="standalone">
+  Redis deployment type
+  
+  **Options**: `standalone`, `sentinel`
+</ParamField>
+
+### Redis Sentinel
+
+<ParamField path="AP_REDIS_SENTINEL_NAME" type="string">
+  Sentinel master name
+</ParamField>
+
+<ParamField path="AP_REDIS_SENTINEL_HOSTS" type="string">
+  Comma-separated list of sentinel hosts
+  
+  **Example**:
+  ```bash
+  AP_REDIS_SENTINEL_HOSTS=sentinel1:26379,sentinel2:26379,sentinel3:26379
+  ```
+</ParamField>
+
+<ParamField path="AP_REDIS_SENTINEL_ROLE" type="enum">
+  Sentinel role
+  
+  **Options**: `master`, `slave`
+</ParamField>
+
+### Redis Job Retention
+
+<ParamField path="AP_REDIS_FAILED_JOB_RETENTION_DAYS" type="number" default="7">
+  How many days to keep failed job data
+</ParamField>
+
+<ParamField path="AP_REDIS_FAILED_JOB_RETENTION_MAX_COUNT" type="number" default="100">
+  Maximum number of failed jobs to retain
+</ParamField>
+
+## Application Configuration
+
+### Environment
+
+<ParamField path="AP_ENVIRONMENT" type="enum" default="prod">
+  Application environment
+  
+  **Options**: `prod`, `dev`
+  
+  ```bash
+  # Production
+  AP_ENVIRONMENT=prod
+  
+  # Development
+  AP_ENVIRONMENT=dev
+  ```
+</ParamField>
+
+<ParamField path="AP_EDITION" type="enum" default="ce">
+  Activepieces edition
+  
+  **Options**: `ce` (Community Edition), `ee` (Enterprise Edition)
+</ParamField>
+
+### Execution
+
+<ParamField path="AP_EXECUTION_MODE" type="enum" default="UNSANDBOXED">
+  Code execution mode for workflows
+  
+  **Options**:
+  - `SANDBOX_CODE_ONLY`: Sandboxed execution using isolated-vm (128MB limit)
+  - `UNSANDBOXED`: Direct Node.js execution (development only)
+  
+  ```bash
+  # Production (recommended)
+  AP_EXECUTION_MODE=SANDBOX_CODE_ONLY
+  
+  # Development only
+  AP_EXECUTION_MODE=UNSANDBOXED
+  ```
+  
+  <Warning>
+  Use `SANDBOX_CODE_ONLY` in production to prevent malicious code execution.
+  </Warning>
+</ParamField>
+
+<ParamField path="AP_SANDBOX_MEMORY_LIMIT" type="number" default="128">
+  Memory limit in MB for sandboxed code execution
+  
+  **Range**: 64-512 MB
+</ParamField>
+
+<ParamField path="AP_SANDBOX_PROPAGATED_ENV_VARS" type="string">
+  Comma-separated environment variables to pass to sandbox
+  
+  **Example**:
+  ```bash
+  AP_SANDBOX_PROPAGATED_ENV_VARS=NODE_ENV,DEBUG,CUSTOM_VAR
+  ```
+</ParamField>
+
+### Timeouts
+
+<ParamField path="AP_FLOW_TIMEOUT_SECONDS" type="number" default="600">
+  Maximum workflow execution time in seconds
+  
+  **Default**: 10 minutes
+</ParamField>
+
+<ParamField path="AP_WEBHOOK_TIMEOUT_SECONDS" type="number" default="30">
+  Webhook request timeout in seconds
+</ParamField>
+
+<ParamField path="AP_TRIGGER_TIMEOUT_SECONDS" type="number">
+  Trigger execution timeout in seconds
+</ParamField>
+
+<ParamField path="AP_TRIGGER_HOOKS_TIMEOUT_SECONDS" type="number">
+  Trigger hook timeout in seconds
+</ParamField>
+
+<ParamField path="AP_TRIGGER_DEFAULT_POLL_INTERVAL" type="number" default="5">
+  Default polling interval in minutes for scheduled triggers
+</ParamField>
+
+### Limits
+
+<ParamField path="AP_MAX_FILE_SIZE_MB" type="number" default="10">
+  Maximum file upload size in megabytes
+</ParamField>
+
+<ParamField path="AP_MAX_FLOW_RUN_LOG_SIZE_MB" type="number" default="2">
+  Maximum size of flow run logs in megabytes
+</ParamField>
+
+<ParamField path="AP_MAX_CONCURRENT_JOBS_PER_PROJECT" type="number">
+  Limit concurrent job execution per project
+</ParamField>
+
+### Data Retention
+
+<ParamField path="AP_EXECUTION_DATA_RETENTION_DAYS" type="number">
+  Days to retain execution data before cleanup
+  
+  **Example**:
+  ```bash
+  AP_EXECUTION_DATA_RETENTION_DAYS=30
+  ```
+</ParamField>
+
+<ParamField path="AP_ISSUE_ARCHIVE_DAYS" type="number">
+  Days before archiving flow issues
+</ParamField>
+
+<ParamField path="AP_PAUSED_FLOW_TIMEOUT_DAYS" type="number">
+  Days before disabling paused flows
+</ParamField>
+
+## File Storage
+
+<ParamField path="AP_FILE_STORAGE_LOCATION" type="enum">
+  File storage backend
+  
+  **Options**: `local`, `s3`
+  
+  **Default**: `local` (uses `/usr/src/app/cache`)
+</ParamField>
+
+### S3 Configuration
+
+<ParamField path="AP_S3_BUCKET" type="string">
+  S3 bucket name for file storage
+</ParamField>
+
+<ParamField path="AP_S3_ACCESS_KEY_ID" type="string">
+  AWS access key ID
+</ParamField>
+
+<ParamField path="AP_S3_SECRET_ACCESS_KEY" type="string">
+  AWS secret access key
+</ParamField>
+
+<ParamField path="AP_S3_REGION" type="string">
+  AWS region
+  
+  **Example**: `us-east-1`, `eu-west-1`
+</ParamField>
+
+<ParamField path="AP_S3_ENDPOINT" type="string">
+  Custom S3 endpoint for S3-compatible services
+  
+  **Examples**:
+  ```bash
+  # MinIO
+  AP_S3_ENDPOINT=http://minio:9000
+  
+  # DigitalOcean Spaces
+  AP_S3_ENDPOINT=https://nyc3.digitaloceanspaces.com
+  
+  # Cloudflare R2
+  AP_S3_ENDPOINT=https://<account_id>.r2.cloudflarestorage.com
+  ```
+</ParamField>
+
+<ParamField path="AP_S3_USE_SIGNED_URLS" type="boolean" default="false">
+  Use pre-signed URLs for S3 file access
+</ParamField>
+
+<ParamField path="AP_S3_USE_IRSA" type="boolean" default="false">
+  Use IAM Roles for Service Accounts (EKS/Kubernetes)
+  
+  <Info>
+  When enabled, authentication uses pod IAM role instead of access keys.
+  </Info>
+</ParamField>
+
+## Email (SMTP)
+
+<ParamField path="AP_SMTP_HOST" type="string">
+  SMTP server hostname
+</ParamField>
+
+<ParamField path="AP_SMTP_PORT" type="number" default="587">
+  SMTP server port
+</ParamField>
+
+<ParamField path="AP_SMTP_USERNAME" type="string">
+  SMTP username
+</ParamField>
+
+<ParamField path="AP_SMTP_PASSWORD" type="string">
+  SMTP password
+</ParamField>
+
+<ParamField path="AP_SMTP_SENDER_EMAIL" type="string">
+  Email address for outgoing emails
+  
+  **Example**: `noreply@yourdomain.com`
+</ParamField>
+
+<ParamField path="AP_SMTP_SENDER_NAME" type="string">
+  Display name for outgoing emails
+  
+  **Example**: `Activepieces`
+</ParamField>
+
+## Worker Configuration
+
+<ParamField path="AP_CONTAINER_TYPE" type="enum" default="WORKER_AND_APP">
+  Container role
+  
+  **Options**:
+  - `WORKER_AND_APP`: Run both API and workers (default)
+  - `APP`: Run API server only
+  - `WORKER`: Run workers only
+  
+  <Info>
+  Use separate containers for scaling. See [Workers](/deployment/workers) guide.
+  </Info>
+</ParamField>
+
+<ParamField path="AP_WORKER_CONCURRENCY" type="number">
+  Number of concurrent jobs per worker
+  
+  **Recommended**: 1-4 based on CPU cores
+</ParamField>
+
+<ParamField path="AP_WORKER_TOKEN" type="string">
+  Authentication token for dedicated workers
+</ParamField>
+
+<ParamField path="AP_PLATFORM_ID_FOR_DEDICATED_WORKER" type="string">
+  Platform ID for dedicated worker deployment
+</ParamField>
+
+<ParamField path="AP_PRE_WARM_CACHE" type="boolean" default="false">
+  Pre-load pieces into memory on startup
+</ParamField>
+
+<ParamField path="AP_PM2_ENABLED" type="boolean" default="false">
+  Enable PM2 process manager for clustering
+  
+  ```bash
+  AP_PM2_ENABLED=true
+  ```
+</ParamField>
+
+## Security
+
+<ParamField path="AP_API_KEY" type="string">
+  Optional API key for platform-level authentication
+</ParamField>
+
+<ParamField path="AP_CLIENT_REAL_IP_HEADER" type="string">
+  HTTP header to extract real client IP
+  
+  **Examples**:
+  ```bash
+  # Behind Cloudflare
+  AP_CLIENT_REAL_IP_HEADER=CF-Connecting-IP
+  
+  # Behind proxy
+  AP_CLIENT_REAL_IP_HEADER=X-Forwarded-For
+  ```
+</ParamField>
+
+<ParamField path="AP_APP_WEBHOOK_SECRETS" type="string">
+  Comma-separated webhook secrets
+</ParamField>
+
+### Rate Limiting
+
+<ParamField path="AP_API_RATE_LIMIT_AUTHN_ENABLED" type="boolean" default="false">
+  Enable authentication rate limiting
+</ParamField>
+
+<ParamField path="AP_API_RATE_LIMIT_AUTHN_MAX" type="number" default="100">
+  Maximum authentication requests per window
+</ParamField>
+
+<ParamField path="AP_API_RATE_LIMIT_AUTHN_WINDOW" type="number" default="60">
+  Rate limit window in seconds
+</ParamField>
+
+<ParamField path="AP_PROJECT_RATE_LIMITER_ENABLED" type="boolean" default="false">
+  Enable per-project rate limiting
+</ParamField>
+
+## Logging
+
+<ParamField path="AP_LOG_LEVEL" type="enum" default="info">
+  Logging verbosity
+  
+  **Options**: `error`, `warn`, `info`, `debug`, `trace`
+</ParamField>
+
+<ParamField path="AP_LOG_PRETTY" type="boolean" default="false">
+  Enable pretty-printed logs (development)
+  
+  ```bash
+  # Development
+  AP_LOG_PRETTY=true
+  
+  # Production (JSON logs)
+  AP_LOG_PRETTY=false
+  ```
+</ParamField>
+
+## Telemetry & Monitoring
+
+<ParamField path="AP_TELEMETRY_ENABLED" type="boolean" default="true">
+  Send anonymous usage telemetry to Activepieces
+  
+  <Info>
+  Helps improve the platform. No sensitive data is collected.
+  </Info>
+</ParamField>
+
+<ParamField path="AP_OTEL_ENABLED" type="boolean" default="false">
+  Enable OpenTelemetry instrumentation
+</ParamField>
+
+<ParamField path="OTEL_EXPORTER_OTLP_ENDPOINT" type="string">
+  OpenTelemetry collector endpoint
+</ParamField>
+
+<ParamField path="OTEL_EXPORTER_OTLP_HEADERS" type="string">
+  Headers for OTLP exporter
+</ParamField>
+
+## Advanced Configuration
+
+<ParamField path="AP_TEMPLATES_SOURCE_URL" type="string" default="https://cloud.activepieces.com/api/v1/flow-templates">
+  URL for flow template repository
+</ParamField>
+
+<ParamField path="AP_PIECES_SOURCE" type="string">
+  Custom pieces registry URL
+</ParamField>
+
+<ParamField path="AP_DEV_PIECES" type="boolean" default="false">
+  Enable development pieces
+</ParamField>
+
+<ParamField path="AP_PIECES_SYNC_MODE" type="enum">
+  Pieces synchronization mode
+</ParamField>
+
+<ParamField path="AP_ENABLE_FLOW_ON_PUBLISH" type="boolean" default="true">
+  Automatically enable flows when published
+</ParamField>
+
+<ParamField path="AP_INTERNAL_URL" type="string">
+  Internal service communication URL
+</ParamField>
+
+<ParamField path="AP_CONFIG_PATH" type="string">
+  Path to custom configuration file
+</ParamField>
+
+<ParamField path="AP_QUEUE_UI_ENABLED" type="boolean" default="false">
+  Enable BullMQ Board for queue monitoring
+</ParamField>
+
+<ParamField path="AP_QUEUE_UI_USERNAME" type="string">
+  Username for queue UI
+</ParamField>
+
+<ParamField path="AP_QUEUE_UI_PASSWORD" type="string">
+  Password for queue UI
+</ParamField>
+
+## Example Configurations
+
+### Development
+
+```bash .env
+AP_ENGINE_EXECUTABLE_PATH=dist/packages/engine/main.js
+AP_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000
+AP_JWT_SECRET=test_jwt_secret
+AP_ENVIRONMENT=dev
+AP_FRONTEND_URL=http://localhost:8080
+AP_POSTGRES_DATABASE=activepieces
+AP_POSTGRES_HOST=localhost
+AP_POSTGRES_PORT=5432
+AP_POSTGRES_USERNAME=postgres
+AP_POSTGRES_PASSWORD=postgres
+AP_REDIS_HOST=localhost
+AP_REDIS_PORT=6379
+AP_EXECUTION_MODE=UNSANDBOXED
+AP_LOG_LEVEL=debug
+AP_LOG_PRETTY=true
+AP_TELEMETRY_ENABLED=false
+```
+
+### Production
+
+```bash .env
+AP_ENGINE_EXECUTABLE_PATH=dist/packages/engine/main.js
+AP_ENCRYPTION_KEY=<generated-with-openssl-rand-hex-32>
+AP_JWT_SECRET=<generated-with-openssl-rand-hex-32>
+AP_ENVIRONMENT=prod
+AP_FRONTEND_URL=https://activepieces.yourdomain.com
+
+# Database
+AP_POSTGRES_DATABASE=activepieces
+AP_POSTGRES_HOST=postgres.yourdomain.com
+AP_POSTGRES_PORT=5432
+AP_POSTGRES_USERNAME=activepieces
+AP_POSTGRES_PASSWORD=<strong-password>
+AP_POSTGRES_USE_SSL=true
+AP_POSTGRES_POOL_SIZE=20
+
+# Redis
+AP_REDIS_HOST=redis.yourdomain.com
+AP_REDIS_PORT=6379
+AP_REDIS_PASSWORD=<redis-password>
+AP_REDIS_USE_SSL=true
+
+# Execution
+AP_EXECUTION_MODE=SANDBOX_CODE_ONLY
+AP_FLOW_TIMEOUT_SECONDS=600
+AP_WEBHOOK_TIMEOUT_SECONDS=30
+
+# Storage
+AP_FILE_STORAGE_LOCATION=s3
+AP_S3_BUCKET=activepieces-files
+AP_S3_ACCESS_KEY_ID=<aws-access-key>
+AP_S3_SECRET_ACCESS_KEY=<aws-secret-key>
+AP_S3_REGION=us-east-1
+
+# Limits
+AP_MAX_FILE_SIZE_MB=50
+AP_EXECUTION_DATA_RETENTION_DAYS=90
+
+# Logging
+AP_LOG_LEVEL=info
+AP_LOG_PRETTY=false
+
+# Monitoring
+AP_TELEMETRY_ENABLED=true
+AP_OTEL_ENABLED=true
+OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Database Setup" icon="database" href="/deployment/database">
+    Configure PostgreSQL
+  </Card>
+  <Card title="Storage" icon="hard-drive" href="/deployment/storage">
+    Setup S3 file storage
+  </Card>
+  <Card title="Workers" icon="users" href="/deployment/workers">
+    Configure worker processes
+  </Card>
+  <Card title="Scaling" icon="chart-line" href="/deployment/scaling">
+    Scale your deployment
+  </Card>
+</CardGroup>

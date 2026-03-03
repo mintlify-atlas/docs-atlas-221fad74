@@ -1,0 +1,664 @@
+---
+title: Version Management
+description: Manage flow versions, view history, and rollback to previous versions
+icon: 'clock-rotate-left'
+---
+
+Activepieces maintains a complete version history of your workflows, allowing you to track changes, compare versions, and rollback when needed.
+
+## Understanding Flow Versions
+
+Every flow has multiple versions over its lifetime:
+
+```typescript
+// From packages/shared/src/lib/automation/flows/flow-version.ts
+export const LATEST_FLOW_SCHEMA_VERSION = '16'
+
+export type FlowVersion = {
+  id: string,
+  flowId: string,
+  displayName: string,
+  trigger: FlowTrigger,
+  valid: boolean,
+  schemaVersion: string | null,
+  state: FlowVersionState.DRAFT | FlowVersionState.LOCKED,
+  created: string,
+  updated: string,
+  updatedBy: string | null
+}
+```
+
+<CardGroup cols={2}>
+  <Card title="Draft Version" icon="pencil">
+    Your working copy. Only one draft exists per flow. Editable and unpublished.
+  </Card>
+  <Card title="Locked Versions" icon="lock">
+    Published versions. Immutable historical records. Multiple can exist.
+  </Card>
+</CardGroup>
+
+## Version States
+
+```typescript
+export enum FlowVersionState {
+  LOCKED = 'LOCKED',  // Published, immutable
+  DRAFT = 'DRAFT'     // Editable, unpublished
+}
+```
+
+<Tabs>
+  <Tab title="Draft">
+    - **One per flow**: Only the current working version
+    - **Editable**: Can be modified at any time
+    - **Unpublished**: Not running in production
+    - **Overwritten**: Changes overwrite the draft
+    
+    ```typescript
+    {
+      "state": "DRAFT",
+      "valid": true,
+      "updated": "2024-03-15T10:30:00Z",
+      "updatedBy": "user-123"
+    }
+    ```
+  </Tab>
+
+  <Tab title="Locked">
+    - **Multiple versions**: Historical record of all publishes
+    - **Immutable**: Cannot be edited
+    - **Published**: Created when you click "Publish"
+    - **Preserved**: Kept for rollback and auditing
+    
+    ```typescript
+    {
+      "state": "LOCKED",
+      "valid": true,
+      "created": "2024-03-15T10:35:00Z",
+      "updatedBy": "user-123"
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Version Lifecycle
+
+<Steps>
+  <Step title="Create Flow">
+    When you create a new flow, a draft version is created:
+
+    ```typescript
+    // From packages/server/api/src/app/flows/flow-version/flow-version.service.ts
+    async createEmptyVersion(flowId: FlowId, request: {
+      displayName: string,
+      notes: Note[]
+    }): Promise<FlowVersion> {
+      const flowVersion: NewFlowVersion = {
+        id: apId(),
+        displayName: request.displayName,
+        flowId,
+        trigger: {
+          type: FlowTriggerType.EMPTY,
+          name: 'trigger',
+          settings: {},
+          valid: false,
+          displayName: 'Select Trigger'
+        },
+        schemaVersion: LATEST_FLOW_SCHEMA_VERSION,
+        connectionIds: [],
+        agentIds: [],
+        valid: false,
+        state: FlowVersionState.DRAFT,
+        notes: request.notes
+      };
+      return flowVersionRepo().save(flowVersion);
+    }
+    ```
+  </Step>
+
+  <Step title="Edit Draft">
+    Make changes to the draft version. Changes are auto-saved:
+
+    ```typescript
+    // Each edit updates the draft
+    {
+      "state": "DRAFT",
+      "updated": "2024-03-15T10:30:00Z",
+      "trigger": { /* updated trigger */ },
+      // ... modified actions
+    }
+    ```
+  </Step>
+
+  <Step title="Publish">
+    Publishing creates a new locked version:
+
+    ```typescript
+    // Draft becomes a locked version
+    {
+      "state": "LOCKED",
+      "created": "2024-03-15T10:35:00Z",
+      "valid": true
+      // Exact copy of draft at publish time
+    }
+    
+    // Draft continues to exist for further edits
+    ```
+  </Step>
+
+  <Step title="Continue Editing">
+    After publishing, continue editing the draft:
+
+    ```typescript
+    // Draft can be modified while locked version runs
+    {
+      "state": "DRAFT",
+      "updated": "2024-03-15T11:00:00Z",
+      // New changes
+    }
+    ```
+  </Step>
+
+  <Step title="Publish Again">
+    Each publish creates a new locked version:
+
+    ```typescript
+    // Version history grows
+    [
+      { "id": "v1", "state": "LOCKED", "created": "2024-03-15T10:35:00Z" },
+      { "id": "v2", "state": "LOCKED", "created": "2024-03-15T11:30:00Z" },
+      { "id": "v3", "state": "LOCKED", "created": "2024-03-15T14:00:00Z" },
+      { "id": "draft", "state": "DRAFT", "updated": "2024-03-15T15:00:00Z" }
+    ]
+    ```
+  </Step>
+</Steps>
+
+## Viewing Version History
+
+### Version List
+
+Access the version history from the flow builder:
+
+```typescript
+// From packages/server/api/src/app/flows/flow-version/flow-version.service.ts
+async list({
+  flowId,
+  cursorRequest,
+  limit
+}): Promise<SeekPage<FlowVersion>> {
+  const paginator = buildPaginator({
+    entity: FlowVersionEntity,
+    query: {
+      limit,
+      order: 'DESC',  // Newest first
+      afterCursor: decodedCursor.nextCursor,
+      beforeCursor: decodedCursor.previousCursor
+    }
+  });
+  
+  const paginationResult = await paginator.paginate(
+    flowVersionRepo().createQueryBuilder()
+      .where({ flowId })
+  );
+  
+  // Include user information
+  const versions = await Promise.all(
+    paginationResult.data.map(async (flowVersion) => ({
+      ...flowVersion,
+      updatedByUser: flowVersion.updatedBy 
+        ? await userService.getMetaInformation({ id: flowVersion.updatedBy })
+        : null
+    }))
+  );
+  
+  return paginationHelper.createPage(versions, paginationResult.cursor);
+}
+```
+
+<Note>
+Versions are listed newest to oldest, with user information showing who made changes.
+</Note>
+
+### Version Metadata
+
+```typescript
+// From packages/shared/src/lib/automation/flows/flow-version.ts
+export type FlowVersionMetadata = {
+  id: string,
+  flowId: string,
+  displayName: string,
+  valid: boolean,
+  state: FlowVersionState,
+  updatedBy: string | null,
+  schemaVersion: string | null,
+  updatedByUser: UserWithMetaInformation | null,
+  created: string,
+  updated: string
+}
+```
+
+Each version shows:
+- **Version ID**: Unique identifier
+- **Display Name**: Flow name at that version
+- **Valid**: Whether all steps were valid
+- **Updated By**: User who created this version
+- **Timestamp**: When version was created
+- **Schema Version**: Flow schema version number
+
+## Using Version History
+
+### View a Previous Version
+
+<Steps>
+  <Step title="Open Version Selector">
+    Click the version dropdown in the flow builder.
+  </Step>
+
+  <Step title="Select Version">
+    Choose any locked version to view.
+  </Step>
+
+  <Step title="View Read-Only">
+    The version opens in read-only mode:
+
+    ```typescript
+    // From packages/web/src/app/builder/builder-hooks.ts
+    {
+      "readonly": true,  // Cannot edit locked versions
+      "flowVersion": { /* locked version data */ }
+    }
+    ```
+  </Step>
+
+  <Step title="Return to Draft">
+    Click "Edit Flow" to return to the draft version.
+  </Step>
+</Steps>
+
+### Use Version as Draft
+
+Restore a previous version to your draft:
+
+```typescript
+// From packages/server/api/src/app/flows/flow-version/flow-version.service.ts
+case FlowOperationType.USE_AS_DRAFT: {
+  const previousVersion = await flowVersionService.getFlowVersionOrThrow({
+    flowId: flowVersion.flowId,
+    versionId: userOperation.request.versionId,
+    removeConnectionsName: false
+  });
+  
+  operations = [{
+    type: FlowOperationType.IMPORT_FLOW,
+    request: {
+      trigger: previousVersion.trigger,
+      displayName: previousVersion.displayName,
+      schemaVersion: previousVersion.schemaVersion,
+      notes: previousVersion.notes
+    }
+  }];
+  break;
+}
+```
+
+<Steps>
+  <Step title="View Previous Version">
+    Select the version you want to restore.
+  </Step>
+
+  <Step title="Click 'Use as Draft'">
+    This copies the version to your draft.
+  </Step>
+
+  <Step title="Review Changes">
+    The draft now matches the selected version.
+  </Step>
+
+  <Step title="Publish (Optional)">
+    If satisfied, publish to make it the active version.
+  </Step>
+</Steps>
+
+<Warning>
+Using a version as draft **overwrites** your current draft. Ensure you don't have unpublished changes you want to keep.
+</Warning>
+
+## Rollback Capabilities
+
+### Rollback to Previous Version
+
+To rollback to a previous version:
+
+<Tabs>
+  <Tab title="Quick Rollback">
+    1. Open version history
+    2. Select the version to restore
+    3. Click "Use as Draft"
+    4. Click "Publish" immediately
+    5. Flow now runs the restored version
+
+    ```typescript
+    // Two operations:
+    // 1. Copy old version to draft
+    // 2. Publish draft
+    ```
+  </Tab>
+
+  <Tab title="Review Before Rollback">
+    1. Open version history
+    2. Select the version to restore
+    3. Click "Use as Draft"
+    4. **Review the restored version**
+    5. Test if needed
+    6. Publish when ready
+
+    ```typescript
+    // Gives you time to verify before publishing
+    ```
+  </Tab>
+
+  <Tab title="Gradual Rollback">
+    For critical workflows:
+    
+    1. Note current published version ID
+    2. Use old version as draft
+    3. Test thoroughly
+    4. Publish when confident
+    5. If issues, use noted version as draft
+    6. Publish to revert
+  </Tab>
+</Tabs>
+
+## Version Comparison
+
+While Activepieces doesn't have built-in visual diff, you can compare versions:
+
+<Steps>
+  <Step title="Open First Version">
+    View the first version you want to compare.
+  </Step>
+
+  <Step title="Note Key Differences">
+    Review:
+    - Trigger configuration
+    - Number of actions
+    - Action settings
+    - Error handling options
+  </Step>
+
+  <Step title="Open Second Version">
+    Switch to the other version.
+  </Step>
+
+  <Step title="Compare">
+    Note differences in:
+    - Step configuration
+    - Data mappings
+    - Connections used
+  </Step>
+</Steps>
+
+<Note>
+Future versions of Activepieces may include visual diff tools for comparing versions.
+</Note>
+
+## Schema Versions
+
+Flow versions track the schema version:
+
+```typescript
+// From packages/shared/src/lib/automation/flows/flow-version.ts
+export const LATEST_FLOW_SCHEMA_VERSION = '16'
+
+export type FlowVersion = {
+  schemaVersion: string | null,  // e.g., "16"
+  // ...
+}
+```
+
+Schema versions track:
+- Flow structure format changes
+- New features added
+- Breaking changes
+
+### Schema Migration
+
+Old versions are automatically migrated:
+
+```typescript
+// From packages/server/api/src/app/flows/flow-version/flow-version-migration.service.ts
+async migrate(flowVersion: FlowVersion): Promise<FlowVersion> {
+  if (flowVersion.schemaVersion === LATEST_FLOW_SCHEMA_VERSION) {
+    return flowVersion;
+  }
+  
+  // Apply migrations to bring to latest schema
+  let migrated = flowVersion;
+  
+  // Migration chain: v1 -> v2 -> v3 -> ... -> v16
+  for (const migration of migrations) {
+    if (shouldApplyMigration(migrated.schemaVersion, migration.version)) {
+      migrated = await migration.migrate(migrated);
+    }
+  }
+  
+  migrated.schemaVersion = LATEST_FLOW_SCHEMA_VERSION;
+  return migrated;
+}
+```
+
+<Note>
+Schema migrations are automatic and backward-compatible. Old versions continue to work.
+</Note>
+
+## Version Metadata Tracking
+
+### Updated By User
+
+```typescript
+// From packages/shared/src/lib/automation/flows/flow-version.ts
+export type FlowVersionMetadata = {
+  updatedBy: string | null,
+  updatedByUser: UserWithMetaInformation | null  // User details
+}
+
+export type UserWithMetaInformation = {
+  id: string,
+  email: string,
+  firstName: string,
+  lastName: string,
+  // ...
+}
+```
+
+Track who made changes:
+- **User ID**: Who created this version
+- **User Info**: Full user details (name, email)
+- **Timestamp**: When version was created
+
+### Connection Tracking
+
+```typescript
+// From packages/shared/src/lib/automation/flows/flow-version.ts
+export type FlowVersion = {
+  connectionIds: string[],  // All connections used
+  agentIds: string[]        // All agents used
+}
+```
+
+Versions track:
+- **Connections**: Which connections are used
+- **Agents**: Which AI agents are referenced
+
+```typescript
+// From packages/server/api/src/app/flows/flow-version/flow-version.service.ts
+// Extracted automatically on save:
+mutatedFlowVersion.connectionIds = flowStructureUtil.extractConnectionIds(mutatedFlowVersion);
+mutatedFlowVersion.agentIds = flowStructureUtil.extractAgentIds(mutatedFlowVersion);
+```
+
+## Version Backup and Recovery
+
+### Backup Files
+
+```typescript
+// From packages/shared/src/lib/automation/flows/flow-version.ts
+export type FlowVersion = {
+  backupFiles: Record<string, string> | null  // Map of file IDs
+}
+```
+
+Versions can include backup files for:
+- Code action source code
+- Sample data
+- Configuration files
+
+### Recovery
+
+If a version is corrupted or lost:
+
+1. **Version History**: Access any locked version
+2. **Backup Files**: Restore from backup file IDs
+3. **Export/Import**: Export flow and import to new flow
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Publish Frequently">
+    Create locked versions regularly:
+    
+    - After significant changes
+    - Before testing in production
+    - When reaching stable states
+    - Before major refactors
+    
+    This gives you more restore points.
+  </Accordion>
+
+  <Accordion title="Use Descriptive Flow Names">
+    Update the flow display name to reflect major changes:
+    
+    ```typescript
+    "User Onboarding v1"
+    "User Onboarding v2 - Added welcome email"
+    "User Onboarding v3 - Fixed error handling"
+    ```
+  </Accordion>
+
+  <Accordion title="Test Before Publishing">
+    Always test your draft before publishing:
+    
+    - Run test flows
+    - Verify all steps
+    - Check data mappings
+    - Review error handling
+  </Accordion>
+
+  <Accordion title="Document Changes">
+    Use flow notes to document what changed:
+    
+    ```typescript
+    {
+      "notes": [
+        {
+          "content": "Added retry logic to API calls",
+          "created": "2024-03-15T10:30:00Z"
+        }
+      ]
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Keep Version History Clean">
+    - Don't publish incomplete work
+    - Combine related changes into one publish
+    - Use draft for experimentation
+    - Only publish tested, working versions
+  </Accordion>
+
+  <Accordion title="Plan Rollbacks">
+    Before making risky changes:
+    
+    1. Note current published version ID
+    2. Make changes in draft
+    3. Test thoroughly
+    4. Publish
+    5. Monitor closely
+    6. Rollback if needed
+  </Accordion>
+</AccordionGroup>
+
+## Version Limits
+
+<Note>
+Activepieces keeps all flow versions indefinitely. There's no automatic cleanup or version limit.
+</Note>
+
+This means:
+- ✅ Complete audit trail
+- ✅ Can rollback to any version
+- ✅ No data loss
+- ⚠️ Storage grows over time (minimal impact)
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Can't Find Old Version">
+    **Problem**: Old version not showing in history.
+    
+    **Solutions**:
+    - Check pagination - versions may be on next page
+    - Verify flow ID is correct
+    - Ensure you have permission to view history
+  </Accordion>
+
+  <Accordion title="Use as Draft Fails">
+    **Problem**: Error when copying version to draft.
+    
+    **Solutions**:
+    - Ensure you have write permissions
+    - Check if version exists
+    - Verify flow is not locked by another user
+  </Accordion>
+
+  <Accordion title="Version Shows as Invalid">
+    **Problem**: Old version marked as invalid.
+    
+    **Reasons**:
+    - Was published in invalid state (shouldn't happen)
+    - Schema migration issue
+    - Piece version no longer available
+    
+    **Solutions**:
+    - View the version to see validation errors
+    - Use as draft and fix issues
+    - Contact support if migration issue
+  </Accordion>
+
+  <Accordion title="Published Version Not Running">
+    **Problem**: Published version but flow not executing.
+    
+    **Check**:
+    - Is flow enabled? (Toggle must be on)
+    - Check `operationStatus` - might still be enabling
+    - Verify trigger configuration
+    - Review trigger logs for errors
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Publishing" icon="rocket" href="/workflows/publishing">
+    Learn about publishing workflows
+  </Card>
+  <Card title="Debugging" icon="bug" href="/workflows/debugging">
+    Debug version issues
+  </Card>
+  <Card title="Templates" icon="clone" href="/workflows/templates">
+    Create reusable templates
+  </Card>
+  <Card title="Best Practices" icon="star" href="/workflows/building-flows">
+    Workflow best practices
+  </Card>
+</CardGroup>

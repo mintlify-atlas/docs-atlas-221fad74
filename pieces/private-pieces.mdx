@@ -1,0 +1,587 @@
+---
+title: Private Pieces
+description: Create and deploy private pieces for your organization
+---
+
+## What are Private Pieces?
+
+Private pieces are custom integrations that you build and deploy for your own use, without sharing them publicly. They're perfect for:
+
+<CardGroup cols={2}>
+  <Card title="Internal APIs" icon="building">
+    Integrate with your company's internal services
+  </Card>
+  <Card title="Custom Tools" icon="wrench">
+    Build organization-specific automations
+  </Card>
+  <Card title="Proprietary Systems" icon="lock">
+    Connect to proprietary or closed-source systems
+  </Card>
+  <Card title="Confidential Logic" icon="shield">
+    Keep business logic private
+  </Card>
+</CardGroup>
+
+## Creating Private Pieces
+
+Private pieces are created the same way as community pieces:
+
+<Steps>
+  <Step title="Create the Piece">
+    Use the CLI to scaffold your piece:
+    
+    ```bash
+    cd packages/pieces/custom
+    npm run create-piece
+    ```
+    
+    Or manually create in `packages/pieces/custom/`:
+    ```
+    packages/pieces/custom/my-company-api/
+    ├── src/
+    │   ├── index.ts
+    │   └── lib/
+    │       ├── actions/
+    │       ├── triggers/
+    │       └── auth.ts
+    ├── package.json
+    └── tsconfig.json
+    ```
+  </Step>
+
+  <Step title="Implement Your Piece">
+    ```typescript src/index.ts
+    import { createPiece, PieceAuth } from '@activepieces/pieces-framework';
+    import { PieceCategory } from '@activepieces/shared';
+    import { createTicketAction } from './lib/actions/create-ticket';
+    import { newTicketTrigger } from './lib/triggers/new-ticket';
+
+    export const myCompanyApi = createPiece({
+      displayName: 'My Company API',
+      description: 'Internal company API integration',
+      
+      auth: PieceAuth.CustomAuth({
+        displayName: 'Connection',
+        props: {
+          apiKey: PieceAuth.SecretText({
+            displayName: 'API Key',
+            required: true,
+          }),
+          environment: Property.StaticDropdown({
+            displayName: 'Environment',
+            required: true,
+            options: {
+              options: [
+                { label: 'Production', value: 'prod' },
+                { label: 'Staging', value: 'staging' },
+                { label: 'Development', value: 'dev' },
+              ],
+            },
+          }),
+        },
+      }),
+      
+      logoUrl: 'https://your-cdn.com/logo.png',
+      categories: [PieceCategory.BUSINESS_INTELLIGENCE],
+      authors: ['your-team'],
+      minimumSupportedRelease: '0.30.0',
+      
+      actions: [createTicketAction],
+      triggers: [newTicketTrigger],
+    });
+    ```
+  </Step>
+
+  <Step title="Test Locally">
+    ```bash
+    npm run dev
+    ```
+    
+    Your private piece will be available alongside community pieces.
+  </Step>
+</Steps>
+
+## Deployment Options
+
+### Option 1: Docker (Recommended)
+
+Package and deploy using Docker:
+
+<Steps>
+  <Step title="Build Your Piece">
+    ```bash
+    npm run build-piece -- --name my-company-api
+    ```
+    
+    This creates a distributable package in `dist/`.
+  </Step>
+
+  <Step title="Update Dockerfile">
+    ```dockerfile Dockerfile
+    FROM activepieces/activepieces:latest
+    
+    # Copy your private piece
+    COPY packages/pieces/custom/my-company-api/dist /app/packages/pieces/custom/my-company-api
+    
+    # Install dependencies
+    WORKDIR /app/packages/pieces/custom/my-company-api
+    RUN npm install --production
+    
+    WORKDIR /app
+    ```
+  </Step>
+
+  <Step title="Build & Deploy">
+    ```bash
+    # Build custom image
+    docker build -t my-company/activepieces:latest .
+    
+    # Push to registry
+    docker push my-company/activepieces:latest
+    
+    # Deploy
+    docker run -d \
+      -p 80:80 \
+      -e AP_API_KEY="your-api-key" \
+      my-company/activepieces:latest
+    ```
+  </Step>
+</Steps>
+
+### Option 2: Volume Mount
+
+Mount pieces directory for development:
+
+```yaml docker-compose.yml
+version: '3'
+services:
+  activepieces:
+    image: activepieces/activepieces:latest
+    ports:
+      - "80:80"
+    volumes:
+      # Mount private pieces
+      - ./packages/pieces/custom:/app/packages/pieces/custom:ro
+    environment:
+      - AP_API_KEY=${AP_API_KEY}
+      - AP_ENCRYPTION_KEY=${AP_ENCRYPTION_KEY}
+      - AP_JWT_SECRET=${AP_JWT_SECRET}
+      - AP_POSTGRES_DATABASE=${AP_POSTGRES_DATABASE}
+      - AP_POSTGRES_HOST=postgres
+      - AP_POSTGRES_PASSWORD=${AP_POSTGRES_PASSWORD}
+      - AP_POSTGRES_USERNAME=${AP_POSTGRES_USERNAME}
+  
+  postgres:
+    image: postgres:14
+    environment:
+      - POSTGRES_DB=${AP_POSTGRES_DATABASE}
+      - POSTGRES_USER=${AP_POSTGRES_USERNAME}
+      - POSTGRES_PASSWORD=${AP_POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+volumes:
+  postgres-data:
+```
+
+Start:
+```bash
+docker-compose up -d
+```
+
+### Option 3: NPM Registry
+
+Publish to private NPM registry:
+
+<Steps>
+  <Step title="Configure Private Registry">
+    ```bash
+    npm config set registry https://npm.company.com
+    npm config set //npm.company.com/:_authToken=${NPM_TOKEN}
+    ```
+  </Step>
+
+  <Step title="Update Package Name">
+    ```json package.json
+    {
+      "name": "@company/piece-my-company-api",
+      "version": "0.0.1",
+      "private": true
+    }
+    ```
+  </Step>
+
+  <Step title="Publish">
+    ```bash
+    npm run build-piece -- --name my-company-api
+    cd dist/
+    npm publish
+    ```
+  </Step>
+
+  <Step title="Install in Activepieces">
+    ```bash
+    npm install @company/piece-my-company-api
+    ```
+  </Step>
+</Steps>
+
+## Environment-Specific Configuration
+
+Manage different configurations per environment:
+
+```typescript src/lib/common/config.ts
+export function getApiUrl(environment: string): string {
+  const urls = {
+    prod: 'https://api.company.com',
+    staging: 'https://api-staging.company.com',
+    dev: 'http://localhost:3000',
+  };
+  
+  return urls[environment] || urls.dev;
+}
+
+export function getApiVersion(environment: string): string {
+  return environment === 'prod' ? 'v2' : 'v1';
+}
+```
+
+Use in actions:
+```typescript
+async run(context) {
+  const { environment, apiKey } = context.auth;
+  const apiUrl = getApiUrl(environment);
+  const apiVersion = getApiVersion(environment);
+  
+  const response = await fetch(
+    `${apiUrl}/${apiVersion}/tickets`,
+    {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+      },
+    }
+  );
+  
+  return response.json();
+}
+```
+
+## Security Best Practices
+
+<AccordionGroup>
+  <Accordion title="Credential Management">
+    Use environment variables for sensitive config:
+    
+    ```typescript
+    // Don't hardcode credentials
+    const apiKey = process.env.COMPANY_API_KEY;  // Bad!
+    
+    // Use auth system
+    const apiKey = context.auth.apiKey;  // Good!
+    ```
+  </Accordion>
+
+  <Accordion title="Network Security">
+    - Use HTTPS for all API calls
+    - Implement IP whitelisting if needed
+    - Use VPN for internal APIs
+    - Validate SSL certificates
+    
+    ```typescript
+    const response = await fetch(apiUrl, {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      // Enforce HTTPS
+      agent: new https.Agent({
+        rejectUnauthorized: true,
+      }),
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="Access Control">
+    Implement role-based access:
+    
+    ```typescript
+    async run(context) {
+      const { apiKey, userId } = context.auth;
+      
+      // Verify user has permission
+      const hasPermission = await checkPermission(userId, 'create_ticket');
+      
+      if (!hasPermission) {
+        throw new Error('Insufficient permissions');
+      }
+      
+      // Proceed with operation
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Audit Logging">
+    Log all operations for compliance:
+    
+    ```typescript
+    async run(context) {
+      const startTime = Date.now();
+      
+      try {
+        const result = await performOperation();
+        
+        // Log success
+        await auditLog({
+          action: 'create_ticket',
+          user: context.auth.userId,
+          status: 'success',
+          duration: Date.now() - startTime,
+        });
+        
+        return result;
+      } catch (error) {
+        // Log failure
+        await auditLog({
+          action: 'create_ticket',
+          user: context.auth.userId,
+          status: 'failure',
+          error: error.message,
+          duration: Date.now() - startTime,
+        });
+        
+        throw error;
+      }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## CI/CD Pipeline
+
+Automate piece deployment:
+
+```yaml .github/workflows/deploy-private-pieces.yml
+name: Deploy Private Pieces
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/pieces/custom/**'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      
+      - name: Install dependencies
+        run: npm install
+      
+      - name: Build piece
+        run: npm run build-piece -- --name my-company-api
+      
+      - name: Run tests
+        run: npm test
+      
+      - name: Build Docker image
+        run: |
+          docker build -t ${{ secrets.DOCKER_REGISTRY }}/activepieces:${{ github.sha }} .
+          docker tag ${{ secrets.DOCKER_REGISTRY }}/activepieces:${{ github.sha }} \
+                     ${{ secrets.DOCKER_REGISTRY }}/activepieces:latest
+      
+      - name: Push to registry
+        run: |
+          echo ${{ secrets.DOCKER_PASSWORD }} | docker login ${{ secrets.DOCKER_REGISTRY }} -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
+          docker push ${{ secrets.DOCKER_REGISTRY }}/activepieces:${{ github.sha }}
+          docker push ${{ secrets.DOCKER_REGISTRY }}/activepieces:latest
+      
+      - name: Deploy to production
+        run: |
+          # Your deployment script
+          kubectl set image deployment/activepieces \
+            activepieces=${{ secrets.DOCKER_REGISTRY }}/activepieces:${{ github.sha }}
+```
+
+## Sharing Within Organization
+
+Share pieces across teams:
+
+### 1. Internal Documentation
+
+Create internal docs:
+
+```markdown docs/pieces/my-company-api.md
+# My Company API Piece
+
+## Overview
+Internal integration with company ticketing system.
+
+## Authentication
+1. Go to https://internal.company.com/settings
+2. Generate API key
+3. Select environment (prod/staging/dev)
+
+## Actions
+
+### Create Ticket
+Create a new support ticket.
+
+**Inputs:**
+- Title (required): Ticket title
+- Description (required): Detailed description
+- Priority: Low/Medium/High/Critical
+- Assignee: User ID of assignee
+
+**Output:**
+- Ticket ID
+- Created timestamp
+- Ticket URL
+
+## Triggers
+
+### New Ticket
+Triggers when a new ticket is created.
+
+**Configuration:**
+- Team: Filter by team name
+- Priority: Filter by priority level
+
+## Examples
+
+### Example 1: Auto-assign tickets
+...
+```
+
+### 2. Internal Package Registry
+
+Publish to Artifactory/Nexus:
+
+```bash
+# Configure registry
+npm config set registry https://artifactory.company.com/npm/
+
+# Publish
+npm publish --registry https://artifactory.company.com/npm/
+```
+
+### 3. Team Training
+
+- Hold training sessions
+- Create video tutorials
+- Share example flows
+- Maintain FAQ
+
+## Monitoring and Maintenance
+
+### Health Checks
+
+```typescript src/lib/actions/health-check.ts
+export const healthCheckAction = createAction({
+  name: 'health_check',
+  displayName: 'Health Check',
+  description: 'Check API connectivity',
+  requireAuth: true,
+  props: {},
+  
+  async run(context) {
+    const startTime = Date.now();
+    
+    try {
+      const response = await fetch(
+        `${getApiUrl(context.auth.environment)}/health`,
+        {
+          headers: {
+            'Authorization': `Bearer ${context.auth.apiKey}`,
+          },
+        }
+      );
+      
+      return {
+        status: 'healthy',
+        latency: Date.now() - startTime,
+        apiVersion: response.headers.get('X-API-Version'),
+      };
+    } catch (error) {
+      return {
+        status: 'unhealthy',
+        error: error.message,
+        latency: Date.now() - startTime,
+      };
+    }
+  },
+});
+```
+
+### Monitoring Dashboard
+
+Track piece usage:
+
+- Execution counts
+- Error rates
+- Response times
+- User adoption
+
+## Versioning Private Pieces
+
+Follow semantic versioning:
+
+```json package.json
+{
+  "name": "@company/piece-my-company-api",
+  "version": "1.2.3",
+  "private": true
+}
+```
+
+- **Major (1.x.x)**: Breaking changes
+- **Minor (x.2.x)**: New features
+- **Patch (x.x.3)**: Bug fixes
+
+See [Versioning Guide](/pieces/versioning) for details.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Piece Not Showing Up">
+    1. Check piece is in correct directory
+    2. Verify package.json is valid
+    3. Ensure piece is exported properly
+    4. Restart Activepieces
+    5. Check logs for errors
+  </Accordion>
+
+  <Accordion title="Authentication Failing">
+    1. Verify API key is correct
+    2. Check environment setting
+    3. Confirm API endpoint is accessible
+    4. Review network/firewall rules
+    5. Check SSL certificate validity
+  </Accordion>
+
+  <Accordion title="Performance Issues">
+    1. Add caching for API responses
+    2. Implement request debouncing
+    3. Optimize data transformations
+    4. Review API rate limits
+    5. Consider pagination for large datasets
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Versioning" href="/pieces/versioning" icon="tag">
+    Learn about piece versioning
+  </Card>
+  <Card title="Testing" href="/pieces/testing" icon="flask">
+    Write comprehensive tests
+  </Card>
+</CardGroup>

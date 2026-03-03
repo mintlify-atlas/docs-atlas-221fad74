@@ -1,0 +1,289 @@
+---
+title: Setup Development Environment
+description: Get your local environment ready for building pieces
+---
+
+## Prerequisites
+
+Before you start, ensure you have:
+
+- **Node.js** 18.x or higher
+- **Bun** 1.3.3 or higher (package manager)
+- **Git** for version control
+- A code editor (VS Code recommended)
+
+## Fork and Clone the Repository
+
+<Steps>
+  <Step title="Fork the Repository">
+    Go to the [Activepieces GitHub repository](https://github.com/activepieces/activepieces) and click the "Fork" button in the top right corner.
+  </Step>
+
+  <Step title="Clone Your Fork">
+    ```bash
+    git clone https://github.com/YOUR_USERNAME/activepieces.git
+    cd activepieces
+    ```
+  </Step>
+
+  <Step title="Add Upstream Remote">
+    ```bash
+    git remote add upstream https://github.com/activepieces/activepieces.git
+    ```
+    
+    This allows you to sync with the main repository later.
+  </Step>
+</Steps>
+
+## Install Dependencies
+
+Activepieces uses **Bun** as the package manager. The setup script will install it automatically:
+
+```bash
+npm run start
+```
+
+This command will:
+1. Install Bun if not already installed
+2. Install all project dependencies
+3. Start the development environment
+
+<Note>
+  The first run may take several minutes as it installs dependencies for all packages.
+</Note>
+
+## Development Environment
+
+Once dependencies are installed, you can start the development servers:
+
+<Tabs>
+  <Tab title="Full Stack">
+    Start frontend, backend, and engine together:
+    
+    ```bash
+    npm run dev
+    ```
+    
+    This runs:
+    - **GUI**: Angular frontend on `http://localhost:4200`
+    - **API**: Backend server on `http://localhost:3000`
+    - **ENG**: Flow execution engine
+  </Tab>
+
+  <Tab title="Frontend Only">
+    Start just the frontend (with API and engine):
+    
+    ```bash
+    npm run dev:frontend
+    ```
+  </Tab>
+
+  <Tab title="Backend Only">
+    Start just backend and engine (no frontend):
+    
+    ```bash
+    npm run dev:backend
+    ```
+  </Tab>
+</Tabs>
+
+## Hot Reloading for Pieces
+
+One of the best features of Activepieces development is **hot reloading** for pieces. When you make changes to piece code, they're immediately reflected without restarting the server.
+
+### How It Works
+
+<Steps>
+  <Step title="Start Development Environment">
+    ```bash
+    npm run dev
+    ```
+  </Step>
+
+  <Step title="Navigate to a Piece">
+    Pieces are located in `packages/pieces/community/` or `packages/pieces/core/`:
+    
+    ```bash
+    cd packages/pieces/community/slack
+    ```
+  </Step>
+
+  <Step title="Edit Piece Code">
+    Make changes to any file in `src/` directory. The changes will be detected automatically.
+  </Step>
+
+  <Step title="Test in Browser">
+    - Go to `http://localhost:4200`
+    - Create or edit a flow
+    - Your updated piece will be available immediately
+  </Step>
+</Steps>
+
+<Tip>
+  Hot reloading works for actions, triggers, properties, and authentication changes. You don't need to rebuild or restart!
+</Tip>
+
+## Project Structure
+
+Understanding the project structure helps you navigate the codebase:
+
+```
+activepieces/
+├── packages/
+│   ├── pieces/
+│   │   ├── framework/          # Piece framework core
+│   │   ├── common/             # Shared utilities
+│   │   ├── community/          # Community pieces
+│   │   │   ├── slack/
+│   │   │   ├── github/
+│   │   │   └── ... (280+ pieces)
+│   │   └── core/               # Core pieces (HTTP, Code, etc.)
+│   ├── web/                    # Frontend application
+│   ├── server/
+│   │   ├── api/                # Backend API
+│   │   └── engine/             # Flow execution engine
+│   └── shared/                 # Shared types and utilities
+├── package.json                # Root package configuration
+└── turbo.json                  # Monorepo build configuration
+```
+
+## Useful Commands
+
+Here are the most common commands you'll use:
+
+<CodeGroup>
+```bash Create a New Piece
+npm run create-piece
+```
+
+```bash Create an Action
+npm run create-action
+```
+
+```bash Create a Trigger
+npm run create-trigger
+```
+
+```bash Lint Code
+npm run lint
+```
+
+```bash Build a Specific Piece
+npm run build-piece -- --name piece-name
+```
+
+```bash Run Tests
+npm run test:e2e
+```
+</CodeGroup>
+
+## Environment Variables
+
+For local development, you may need to configure environment variables:
+
+```bash .env
+# API Configuration
+AP_API_KEY=your-api-key
+AP_ENCRYPTION_KEY=your-encryption-key
+AP_JWT_SECRET=your-jwt-secret
+
+# Database
+AP_POSTGRES_DATABASE=activepieces
+AP_POSTGRES_HOST=localhost
+AP_POSTGRES_PORT=5432
+AP_POSTGRES_USERNAME=postgres
+AP_POSTGRES_PASSWORD=password
+
+# Frontend
+AP_FRONTEND_URL=http://localhost:4200
+
+# Execution Mode
+AP_EXECUTION_MODE=UNSANDBOXED
+```
+
+<Warning>
+  Never commit `.env` files to version control. They're already in `.gitignore`.
+</Warning>
+
+## IDE Setup (VS Code)
+
+For the best development experience with VS Code:
+
+### Recommended Extensions
+
+- **ESLint** - Linting and code quality
+- **Prettier** - Code formatting
+- **TypeScript and JavaScript Language Features** - Enhanced TS support
+- **GitLens** - Git integration
+
+### Workspace Settings
+
+Create `.vscode/settings.json`:
+
+```json
+{
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": true
+  },
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true
+}
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Bun installation fails">
+    If automatic Bun installation fails:
+    
+    ```bash
+    # Install Bun manually
+    curl -fsSL https://bun.sh/install | bash
+    
+    # Then run setup again
+    npm run start
+    ```
+  </Accordion>
+
+  <Accordion title="Port already in use">
+    If ports 3000 or 4200 are already in use:
+    
+    ```bash
+    # Kill processes using these ports
+    lsof -ti:3000 | xargs kill -9
+    lsof -ti:4200 | xargs kill -9
+    ```
+  </Accordion>
+
+  <Accordion title="Hot reload not working">
+    If changes aren't being detected:
+    
+    1. Ensure you're in dev mode: `npm run dev`
+    2. Check file watcher limits (Linux):
+       ```bash
+       echo fs.inotify.max_user_watches=524288 | sudo tee -a /etc/sysctl.conf
+       sudo sysctl -p
+       ```
+    3. Restart the dev server
+  </Accordion>
+
+  <Accordion title="TypeScript errors">
+    If you see TypeScript errors after pulling changes:
+    
+    ```bash
+    # Clean and reinstall
+    bun install
+    
+    # Restart TypeScript server in VS Code
+    # CMD/CTRL + Shift + P -> "TypeScript: Restart TS Server"
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<Card title="Create Your First Piece" href="/pieces/create-piece" icon="rocket">
+  Now that your environment is set up, create your first piece!
+</Card>

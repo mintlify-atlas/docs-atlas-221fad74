@@ -1,0 +1,393 @@
+---
+title: Create a Piece
+description: Learn how to create a new piece from scratch
+---
+
+## Using the CLI
+
+The easiest way to create a new piece is using the built-in CLI command:
+
+```bash
+npm run create-piece
+```
+
+This interactive command will prompt you for:
+
+<Steps>
+  <Step title="Piece Name">
+    Enter the name of your piece (e.g., `my-service`)
+    - Use lowercase with hyphens
+    - Must be unique across all pieces
+  </Step>
+
+  <Step title="Display Name">
+    The human-readable name shown in the UI (e.g., `My Service`)
+  </Step>
+
+  <Step title="Description">
+    A brief description of what your piece does
+  </Step>
+
+  <Step title="Category">
+    Choose from categories like:
+    - Communication
+    - Productivity
+    - Marketing
+    - Developer Tools
+    - And more...
+  </Step>
+</Steps>
+
+The CLI will:
+1. Create the piece directory structure
+2. Generate boilerplate code
+3. Add the piece to the workspace configuration
+
+## Piece Structure
+
+After running the CLI, your piece will have this structure:
+
+```
+packages/pieces/community/my-service/
+├── src/
+│   ├── index.ts              # Main piece definition
+│   ├── lib/
+│   │   ├── actions/          # Action implementations
+│   │   ├── triggers/         # Trigger implementations
+│   │   ├── common/           # Shared utilities
+│   │   └── auth.ts           # Authentication setup
+├── package.json              # Package configuration
+└── tsconfig.json            # TypeScript configuration
+```
+
+## Anatomy of a Piece
+
+Let's look at a real example from the GitHub piece:
+
+```typescript packages/pieces/community/github/src/index.ts
+import { createPiece, PieceAuth } from '@activepieces/pieces-framework';
+import { PieceCategory } from '@activepieces/shared';
+import { githubCreateIssueAction } from './lib/actions/create-issue';
+import { githubTriggers } from './lib/trigger';
+import { githubAuth } from './lib/auth';
+
+export const github = createPiece({
+  displayName: 'GitHub',
+  description: 'Developer platform for code management',
+  
+  minimumSupportedRelease: '0.30.0',
+  logoUrl: 'https://cdn.activepieces.com/pieces/github.png',
+  categories: [PieceCategory.DEVELOPER_TOOLS],
+  
+  // Authentication configuration
+  auth: githubAuth,
+  
+  // List of actions
+  actions: [
+    githubCreateIssueAction,
+    // ... more actions
+  ],
+  
+  // List of triggers
+  triggers: githubTriggers,
+  
+  // Contributors
+  authors: ['kishanprmr', 'abuaboud'],
+});
+```
+
+### Key Components
+
+<Tabs>
+  <Tab title="Metadata">
+    ```typescript
+    {
+      displayName: 'GitHub',           // Shown in UI
+      description: 'Description...',    // Piece description
+      logoUrl: 'https://...',           // Logo image URL
+      categories: [PieceCategory.DEVELOPER_TOOLS],
+      authors: ['username'],            // GitHub usernames
+      minimumSupportedRelease: '0.30.0' // Min Activepieces version
+    }
+    ```
+  </Tab>
+
+  <Tab title="Authentication">
+    ```typescript
+    auth: PieceAuth.OAuth2({
+      displayName: 'Connection',
+      authUrl: 'https://github.com/login/oauth/authorize',
+      tokenUrl: 'https://github.com/login/oauth/access_token',
+      required: true,
+      scope: ['repo', 'user']
+    })
+    ```
+  </Tab>
+
+  <Tab title="Actions & Triggers">
+    ```typescript
+    actions: [
+      createIssueAction,
+      createPullRequestAction,
+      // ... more actions
+    ],
+    triggers: [
+      newIssuesTrigger,
+      newPullRequestTrigger,
+      // ... more triggers
+    ]
+    ```
+  </Tab>
+</Tabs>
+
+## Example: Building a Simple Piece
+
+Let's create a simple weather service piece:
+
+<Steps>
+  <Step title="Create the Piece">
+    ```bash
+    npm run create-piece
+    # Name: weather-api
+    # Display Name: Weather API
+    # Description: Get weather information
+    # Category: PRODUCTIVITY
+    ```
+  </Step>
+
+  <Step title="Define Authentication">
+    ```typescript src/lib/auth.ts
+    import { PieceAuth } from '@activepieces/pieces-framework';
+
+    export const weatherAuth = PieceAuth.SecretText({
+      displayName: 'API Key',
+      description: 'Enter your Weather API key',
+      required: true,
+      validate: async ({ auth }) => {
+        // Optional: Validate the API key
+        return {
+          valid: true,
+        };
+      },
+    });
+    ```
+  </Step>
+
+  <Step title="Create Main File">
+    ```typescript src/index.ts
+    import { createPiece } from '@activepieces/pieces-framework';
+    import { PieceCategory } from '@activepieces/shared';
+    import { weatherAuth } from './lib/auth';
+    import { getCurrentWeather } from './lib/actions/get-current-weather';
+
+    export const weatherApi = createPiece({
+      displayName: 'Weather API',
+      description: 'Get weather information for any location',
+      auth: weatherAuth,
+      minimumSupportedRelease: '0.30.0',
+      logoUrl: 'https://cdn.activepieces.com/pieces/weather.png',
+      categories: [PieceCategory.PRODUCTIVITY],
+      authors: ['your-github-username'],
+      actions: [
+        getCurrentWeather,
+      ],
+      triggers: [],
+    });
+    ```
+  </Step>
+
+  <Step title="Add Package Configuration">
+    ```json package.json
+    {
+      "name": "@activepieces/piece-weather-api",
+      "version": "0.0.1",
+      "dependencies": {
+        "@activepieces/pieces-framework": "workspace:*",
+        "@activepieces/shared": "workspace:*"
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+## Piece Configuration Options
+
+<ParamField path="displayName" type="string" required>
+  The name shown in the Activepieces UI
+</ParamField>
+
+<ParamField path="description" type="string">
+  A brief description of the piece's functionality
+</ParamField>
+
+<ParamField path="logoUrl" type="string" required>
+  URL to the piece logo (PNG or SVG). Should be hosted on CDN:
+  `https://cdn.activepieces.com/pieces/your-piece.png`
+</ParamField>
+
+<ParamField path="auth" type="PieceAuth">
+  Authentication configuration. See [Authentication](/pieces/authentication)
+</ParamField>
+
+<ParamField path="categories" type="PieceCategory[]">
+  Categories for organizing pieces:
+  - `COMMUNICATION`
+  - `PRODUCTIVITY`
+  - `MARKETING`
+  - `SALES_AND_CRM`
+  - `DEVELOPER_TOOLS`
+  - `ANALYTICS`
+  - `CONTENT_AND_FILES`
+  - `COMMERCE`
+  - And more...
+</ParamField>
+
+<ParamField path="minimumSupportedRelease" type="string">
+  Minimum Activepieces version required (e.g., `"0.30.0"`)
+</ParamField>
+
+<ParamField path="maximumSupportedRelease" type="string">
+  Maximum supported version (optional, for deprecation)
+</ParamField>
+
+<ParamField path="authors" type="string[]">
+  GitHub usernames of piece contributors
+</ParamField>
+
+<ParamField path="actions" type="Action[]" required>
+  Array of action definitions. See [Create Action](/pieces/create-action)
+</ParamField>
+
+<ParamField path="triggers" type="Trigger[]">
+  Array of trigger definitions. See [Create Trigger](/pieces/create-trigger)
+</ParamField>
+
+## Real-World Examples
+
+Look at these community pieces for inspiration:
+
+<CardGroup cols={2}>
+  <Card title="Slack Piece" icon="slack">
+    ```bash
+    packages/pieces/community/slack/
+    ```
+    
+    Full-featured piece with:
+    - OAuth2 authentication
+    - 20+ actions
+    - Multiple webhook triggers
+    - Block Kit support
+  </Card>
+
+  <Card title="GitHub Piece" icon="github">
+    ```bash
+    packages/pieces/community/github/
+    ```
+    
+    Complex piece with:
+    - OAuth2 auth
+    - REST API integration
+    - GraphQL support
+    - Repository operations
+  </Card>
+
+  <Card title="Google Sheets" icon="table">
+    ```bash
+    packages/pieces/community/google-sheets/
+    ```
+    
+    Data-focused piece:
+    - OAuth2 with Google
+    - CRUD operations
+    - Bulk updates
+    - Dynamic dropdown
+  </Card>
+
+  <Card title="Airtable" icon="database">
+    ```bash
+    packages/pieces/community/airtable/
+    ```
+    
+    Database piece with:
+    - API Key auth
+    - Record management
+    - Field mapping
+    - Attachment handling
+  </Card>
+</CardGroup>
+
+## Testing Your Piece
+
+Once created, test your piece locally:
+
+<Steps>
+  <Step title="Start Dev Server">
+    ```bash
+    npm run dev
+    ```
+  </Step>
+
+  <Step title="Open Activepieces">
+    Navigate to `http://localhost:4200`
+  </Step>
+
+  <Step title="Create a Flow">
+    - Click "Create Flow"
+    - Add a step
+    - Search for your piece
+    - Configure and test
+  </Step>
+</Steps>
+
+<Tip>
+  Use hot reloading! Changes to your piece code are reflected immediately without restarting.
+</Tip>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Naming Conventions">
+    - **Piece name**: lowercase-with-hyphens (e.g., `my-service`)
+    - **Display name**: Title Case (e.g., `My Service`)
+    - **Export name**: camelCase (e.g., `export const myService = createPiece(...)`)
+    - **Action/Trigger names**: camelCase with suffix (e.g., `sendMessageAction`)
+  </Accordion>
+
+  <Accordion title="Logo Guidelines">
+    - Use official brand logos when possible
+    - PNG or SVG format
+    - Square aspect ratio (1:1)
+    - Upload to Activepieces CDN
+    - Fallback: Use a placeholder icon
+  </Accordion>
+
+  <Accordion title="Categories">
+    - Choose the most relevant category
+    - Use only one primary category
+    - Consider how users will search for your piece
+  </Accordion>
+
+  <Accordion title="Versioning">
+    - Start with version `0.0.1`
+    - Follow semantic versioning (SemVer)
+    - Set `minimumSupportedRelease` appropriately
+    - Document breaking changes
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Add Authentication" href="/pieces/authentication" icon="key">
+    Configure OAuth2, API keys, or custom auth
+  </Card>
+  <Card title="Create Actions" href="/pieces/create-action" icon="play">
+    Add actions that perform operations
+  </Card>
+  <Card title="Create Triggers" href="/pieces/create-trigger" icon="bolt">
+    Add triggers that start flows
+  </Card>
+  <Card title="Properties Guide" href="/pieces/properties" icon="sliders">
+    Learn about all property types
+  </Card>
+</CardGroup>

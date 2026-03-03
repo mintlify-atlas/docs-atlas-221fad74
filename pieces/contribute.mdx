@@ -1,0 +1,507 @@
+---
+title: Contributing Pieces
+description: Submit your piece to the Activepieces community
+---
+
+## Why Contribute?
+
+<CardGroup cols={2}>
+  <Card title="Help the Community" icon="users">
+    Share integrations with 10,000+ users
+  </Card>
+  <Card title="Open Source" icon="code-branch">
+    Join 60% of community-contributed pieces
+  </Card>
+  <Card title="NPM Published" icon="npm" iconType="brand">
+    All pieces published to npmjs.com
+  </Card>
+  <Card title="MCP Servers" icon="server">
+    Available as MCP servers for LLMs
+  </Card>
+</CardGroup>
+
+## Contribution Workflow
+
+<Steps>
+  <Step title="Build Your Piece">
+    Follow the [Create a Piece](/pieces/create-piece) guide to build your integration.
+    
+    Ensure:
+    - All actions and triggers work correctly
+    - Authentication is properly configured
+    - Properties have clear descriptions
+    - Error handling is implemented
+  </Step>
+
+  <Step title="Test Thoroughly">
+    Test your piece using the [Testing](/pieces/testing) guide.
+    
+    - [ ] Manual testing in local environment
+    - [ ] Unit tests written and passing
+    - [ ] Edge cases handled
+    - [ ] Error messages are helpful
+  </Step>
+
+  <Step title="Prepare for Submission">
+    <Tabs>
+      <Tab title="Code Quality">
+        Run linting:
+        ```bash
+        npm run lint
+        ```
+        
+        Fix any issues:
+        ```bash
+        npm run lint -- --fix
+        ```
+      </Tab>
+      
+      <Tab title="Documentation">
+        Add README.md:
+        ```markdown packages/pieces/community/my-piece/README.md
+        # My Piece
+        
+        Integration with My Service
+        
+        ## Actions
+        
+        - **Send Message**: Send a message to a channel
+        - **Create Item**: Create a new item
+        
+        ## Triggers
+        
+        - **New Message**: Triggers when a new message is received
+        
+        ## Authentication
+        
+        This piece uses OAuth2 authentication.
+        
+        To obtain credentials:
+        1. Go to https://example.com/developers
+        2. Create a new application
+        3. Copy Client ID and Client Secret
+        ```
+      </Tab>
+      
+      <Tab title="Logo">
+        Add piece logo:
+        
+        1. Use official brand logo (PNG/SVG)
+        2. Square aspect ratio (1:1)
+        3. Minimum 256x256px
+        4. Upload to: `https://cdn.activepieces.com/pieces/my-piece.png`
+        
+        <Note>
+          Contact the team on [Discord](https://discord.gg/2jUXBKDdP8) to upload your logo to the CDN.
+        </Note>
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Create Pull Request">
+    <Tabs>
+      <Tab title="Fork & Branch">
+        ```bash
+        # Ensure you're on latest main
+        git checkout main
+        git pull upstream main
+        
+        # Create feature branch
+        git checkout -b feat/add-my-piece
+        ```
+      </Tab>
+      
+      <Tab title="Commit Changes">
+        ```bash
+        # Stage your changes
+        git add packages/pieces/community/my-piece
+        
+        # Commit with clear message
+        git commit -m "feat: add My Piece integration
+        
+        - Add OAuth2 authentication
+        - Implement send message action
+        - Implement new message trigger
+        - Add comprehensive tests"
+        ```
+      </Tab>
+      
+      <Tab title="Push & PR">
+        ```bash
+        # Push to your fork
+        git push origin feat/add-my-piece
+        ```
+        
+        Then:
+        1. Go to https://github.com/activepieces/activepieces
+        2. Click "Pull requests" > "New pull request"
+        3. Click "compare across forks"
+        4. Select your fork and branch
+        5. Fill out the PR template
+        6. Submit for review
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Code Review">
+    The Activepieces team will review your PR:
+    
+    - Functionality review
+    - Code quality check
+    - Security audit
+    - Documentation review
+    
+    Address any feedback:
+    ```bash
+    # Make requested changes
+    git add .
+    git commit -m "fix: address review feedback"
+    git push origin feat/add-my-piece
+    ```
+  </Step>
+
+  <Step title="Merge & Publish">
+    Once approved:
+    
+    1. **PR merged** to main branch
+    2. **Piece published** to npmjs.com
+    3. **Available** in next Activepieces release
+    4. **MCP server** automatically generated
+    
+    Congratulations! 🎉
+  </Step>
+</Steps>
+
+## Pull Request Template
+
+Use this template when creating your PR:
+
+```markdown
+## Description
+
+Adds integration with [Service Name] that allows users to:
+- [Key feature 1]
+- [Key feature 2]
+- [Key feature 3]
+
+## Type of Change
+
+- [ ] New piece
+- [ ] Bug fix
+- [ ] Feature enhancement
+- [ ] Breaking change
+
+## Checklist
+
+- [ ] I have tested this piece locally
+- [ ] I have added unit tests
+- [ ] I have updated documentation
+- [ ] I have run `npm run lint` and fixed issues
+- [ ] All actions and triggers work as expected
+- [ ] Authentication is properly configured
+- [ ] Error handling is implemented
+- [ ] Logo has been uploaded to CDN
+
+## Screenshots
+
+[Add screenshots showing the piece in action]
+
+## Testing Instructions
+
+1. Install piece: `npm install`
+2. Start dev server: `npm run dev`
+3. Create flow with [Piece Name]
+4. Test [Action/Trigger Name]
+5. Verify output matches expected result
+
+## Additional Notes
+
+[Any additional context or notes for reviewers]
+```
+
+## Contribution Guidelines
+
+### Code Style
+
+<AccordionGroup>
+  <Accordion title="TypeScript Best Practices">
+    - Use TypeScript for all code
+    - Define proper types for inputs/outputs
+    - Avoid `any` type
+    - Use async/await for promises
+    
+    ```typescript
+    // Good
+    interface SendMessageInput {
+      channel: string;
+      text: string;
+    }
+    
+    interface SendMessageOutput {
+      messageId: string;
+      timestamp: string;
+    }
+    
+    async function sendMessage(input: SendMessageInput): Promise<SendMessageOutput> {
+      // Implementation
+    }
+    
+    // Bad
+    async function sendMessage(input: any): Promise<any> {
+      // Implementation
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Naming Conventions">
+    Follow these naming patterns:
+    
+    ```typescript
+    // Piece export: camelCase
+    export const myService = createPiece({...});
+    
+    // Action name: snake_case
+    name: 'send_message'
+    
+    // Action export: camelCase + Action suffix
+    export const sendMessageAction = createAction({...});
+    
+    // Trigger name: snake_case
+    name: 'new_message'
+    
+    // Trigger export: camelCase + Trigger suffix
+    export const newMessageTrigger = createTrigger({...});
+    
+    // Auth export: camelCase + Auth suffix
+    export const myServiceAuth = PieceAuth.OAuth2({...});
+    ```
+  </Accordion>
+
+  <Accordion title="Error Handling">
+    Provide helpful error messages:
+    
+    ```typescript
+    try {
+      const response = await makeApiCall();
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(
+          `Failed to send message: ${error.message}. ` +
+          `Please check your channel ID and try again.`
+        );
+      }
+      
+      return response.json();
+    } catch (error) {
+      if (error.message.includes('401')) {
+        throw new Error(
+          'Authentication failed. Please reconnect your account.'
+        );
+      }
+      throw error;
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Documentation">
+    Document all properties clearly:
+    
+    ```typescript
+    Property.ShortText({
+      displayName: 'Channel ID',
+      description: 'The unique identifier of the Slack channel (e.g., C1234567890). You can find this by right-clicking the channel and selecting "Copy Link".',
+      required: true,
+    })
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Security Guidelines
+
+<Warning>
+  **Never commit secrets or credentials!**
+</Warning>
+
+<AccordionGroup>
+  <Accordion title="Authentication Security">
+    - Store credentials securely using the auth system
+    - Never log sensitive data
+    - Validate auth before making API calls
+    - Use HTTPS for all API calls
+    
+    ```typescript
+    // Good
+    const response = await fetch(apiUrl, {
+      headers: {
+        'Authorization': `Bearer ${context.auth.access_token}`,
+      },
+    });
+    
+    // Bad - Don't log tokens
+    console.log('Token:', context.auth.access_token);
+    ```
+  </Accordion>
+
+  <Accordion title="Input Validation">
+    Validate all user inputs:
+    
+    ```typescript
+    async run(context) {
+      const email = context.propsValue.email;
+      
+      // Validate email format
+      if (!email.match(/^[^@]+@[^@]+\.[^@]+$/)) {
+        throw new Error('Invalid email address format');
+      }
+      
+      // Validate URL
+      const url = context.propsValue.webhookUrl;
+      if (!url.startsWith('https://')) {
+        throw new Error('Webhook URL must use HTTPS');
+      }
+      
+      // Continue with validated inputs
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Dependency Security">
+    - Only use trusted npm packages
+    - Keep dependencies minimal
+    - Update dependencies regularly
+    - Review package licenses
+    
+    ```json package.json
+    {
+      "dependencies": {
+        "@activepieces/pieces-framework": "workspace:*",
+        "@activepieces/pieces-common": "workspace:*",
+        "axios": "^1.6.0"  // Specific versions
+      }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Community Standards
+
+### License
+
+All community pieces are released under the **MIT License**:
+
+- Free to use, modify, and distribute
+- Must include copyright notice
+- No warranty provided
+
+### Code of Conduct
+
+Follow the [Activepieces Code of Conduct](https://github.com/activepieces/activepieces/blob/main/CODE_OF_CONDUCT.md):
+
+- Be respectful and inclusive
+- Welcome newcomers
+- Accept constructive criticism
+- Focus on what's best for the community
+
+### Getting Help
+
+Need help with your contribution?
+
+<CardGroup cols={2}>
+  <Card title="Discord Community" icon="discord" iconType="brand" href="https://discord.gg/2jUXBKDdP8">
+    Join our Discord for real-time help
+  </Card>
+  <Card title="GitHub Discussions" icon="github" iconType="brand" href="https://github.com/activepieces/activepieces/discussions">
+    Ask questions and share ideas
+  </Card>
+  <Card title="Documentation" icon="book" href="/pieces/introduction">
+    Read the full piece documentation
+  </Card>
+  <Card title="Examples" icon="code" href="https://github.com/activepieces/activepieces/tree/main/packages/pieces/community">
+    Browse 280+ existing pieces
+  </Card>
+</CardGroup>
+
+## After Your PR is Merged
+
+### Recognition
+
+Your contribution will be recognized:
+
+- **Author credit** in the piece metadata
+- **Contributor badge** on GitHub
+- **Listed** in README contributors section
+- **Featured** in release notes
+
+### Maintenance
+
+As a contributor, you may:
+
+- Receive notifications for issues related to your piece
+- Be asked to review updates to your piece
+- Continue improving your piece with new features
+
+### Updates
+
+To update your piece:
+
+1. Create a new branch
+2. Make your changes
+3. Update version in `package.json`
+4. Create a new PR
+5. Follow same review process
+
+## Contribution Checklist
+
+Before submitting:
+
+### Functionality
+- [ ] All actions work with valid inputs
+- [ ] All triggers properly detect events
+- [ ] Authentication validates correctly
+- [ ] Error messages are clear
+- [ ] Edge cases are handled
+
+### Code Quality
+- [ ] TypeScript types are properly defined
+- [ ] No linting errors
+- [ ] Code follows style guidelines
+- [ ] Naming conventions followed
+- [ ] Comments explain complex logic
+
+### Testing
+- [ ] Manual testing completed
+- [ ] Unit tests written and passing
+- [ ] Integration tests pass
+- [ ] Test coverage is adequate
+
+### Documentation
+- [ ] README.md created
+- [ ] Properties have descriptions
+- [ ] Actions documented
+- [ ] Triggers documented
+- [ ] Auth setup explained
+
+### Security
+- [ ] No hardcoded credentials
+- [ ] Input validation implemented
+- [ ] HTTPS used for API calls
+- [ ] Dependencies reviewed
+- [ ] Secrets not logged
+
+### Publishing
+- [ ] Logo uploaded to CDN
+- [ ] Version set to 0.0.1
+- [ ] Authors list updated
+- [ ] License included
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Private Pieces" href="/pieces/private-pieces" icon="lock">
+    Create private pieces for your organization
+  </Card>
+  <Card title="Versioning" href="/pieces/versioning" icon="tag">
+    Learn about piece versioning
+  </Card>
+</CardGroup>

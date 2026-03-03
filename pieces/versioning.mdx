@@ -1,0 +1,595 @@
+---
+title: Piece Versioning
+description: Learn about semantic versioning, breaking changes, and publishing pieces
+---
+
+## Overview
+
+Activepieces pieces follow [Semantic Versioning](https://semver.org/) (SemVer) to ensure compatibility and manage breaking changes. All pieces are versioned independently and published to npmjs.com.
+
+## Semantic Versioning
+
+Version format: `MAJOR.MINOR.PATCH` (e.g., `1.2.3`)
+
+<CardGroup cols={3}>
+  <Card title="Major (1.x.x)" icon="exclamation">
+    Breaking changes that require user action
+  </Card>
+  <Card title="Minor (x.2.x)" icon="plus">
+    New features, backward compatible
+  </Card>
+  <Card title="Patch (x.x.3)" icon="wrench">
+    Bug fixes, backward compatible
+  </Card>
+</CardGroup>
+
+### Version Examples
+
+<Tabs>
+  <Tab title="Patch Update">
+    **0.0.1 → 0.0.2**
+    
+    Bug fixes and minor improvements:
+    - Fix error message typo
+    - Improve error handling
+    - Update documentation
+    - Fix edge case bug
+    
+    ```json package.json
+    {
+      "name": "@activepieces/piece-slack",
+      "version": "0.0.2"
+    }
+    ```
+  </Tab>
+
+  <Tab title="Minor Update">
+    **0.1.0 → 0.2.0**
+    
+    New features without breaking existing functionality:
+    - Add new action
+    - Add new trigger
+    - Add optional property
+    - Add new authentication method
+    
+    ```json package.json
+    {
+      "name": "@activepieces/piece-slack",
+      "version": "0.2.0"
+    }
+    ```
+  </Tab>
+
+  <Tab title="Major Update">
+    **1.0.0 → 2.0.0**
+    
+    Breaking changes:
+    - Remove action or trigger
+    - Change required properties
+    - Change output format
+    - Change authentication method
+    - Rename action/trigger
+    
+    ```json package.json
+    {
+      "name": "@activepieces/piece-slack",
+      "version": "2.0.0"
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## What Constitutes a Breaking Change?
+
+<AccordionGroup>
+  <Accordion title="Breaking Changes" icon="exclamation">
+    Changes that break existing flows:
+    
+    - **Removing** actions, triggers, or properties
+    - **Renaming** actions, triggers, or properties
+    - **Making optional property required**
+    - **Changing property type** (e.g., string to number)
+    - **Changing output structure** that breaks downstream steps
+    - **Removing authentication method**
+    - **Changing API behavior** significantly
+    
+    ```typescript
+    // Breaking: Removing property
+    props: {
+      channel: Property.ShortText({ required: true }),
+      // message property removed - BREAKING
+    }
+    
+    // Breaking: Making property required
+    props: {
+      channel: Property.ShortText({ 
+        required: true  // Was false - BREAKING
+      }),
+    }
+    
+    // Breaking: Changing output format
+    return {
+      id: response.id,
+      // removed 'name' field - BREAKING
+    };
+    ```
+  </Accordion>
+
+  <Accordion title="Non-Breaking Changes" icon="check">
+    Changes that maintain compatibility:
+    
+    - **Adding new** actions, triggers, or optional properties
+    - **Adding fields** to output (but not removing)
+    - **Making required property optional**
+    - **Improving error messages**
+    - **Adding default values**
+    - **Performance improvements**
+    - **Bug fixes**
+    
+    ```typescript
+    // Non-breaking: Adding optional property
+    props: {
+      channel: Property.ShortText({ required: true }),
+      threadTs: Property.ShortText({ 
+        required: false  // New optional property - OK
+      }),
+    }
+    
+    // Non-breaking: Adding output field
+    return {
+      id: response.id,
+      name: response.name,
+      createdAt: response.created_at,  // New field - OK
+    };
+    
+    // Non-breaking: Making property optional
+    props: {
+      channel: Property.ShortText({ 
+        required: false  // Was true - OK
+      }),
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Version Lifecycle
+
+### Initial Release
+
+Start with version `0.0.1`:
+
+```json package.json
+{
+  "name": "@activepieces/piece-my-service",
+  "version": "0.0.1",
+  "description": "Integration with My Service"
+}
+```
+
+### Development Phase (0.x.x)
+
+During initial development:
+- Major version stays at `0`
+- Minor bumps for new features
+- Patch bumps for bug fixes
+- Breaking changes allowed in minor versions
+
+```json
+0.0.1 → Initial release
+0.0.2 → Bug fix
+0.1.0 → Add new action
+0.2.0 → Breaking change (allowed in 0.x)
+0.2.1 → Bug fix
+```
+
+### Stable Release (1.0.0+)
+
+Once stable, release `1.0.0`:
+
+```json package.json
+{
+  "name": "@activepieces/piece-my-service",
+  "version": "1.0.0"
+}
+```
+
+From this point:
+- Major version for breaking changes
+- Minor version for new features
+- Patch version for bug fixes
+
+## Managing Breaking Changes
+
+### Migration Path
+
+When making breaking changes:
+
+<Steps>
+  <Step title="Deprecate Old Version">
+    Mark the old version as deprecated:
+    
+    ```typescript
+    export const oldAction = createAction({
+      name: 'old_action',
+      displayName: 'Old Action (Deprecated)',
+      description: 'DEPRECATED: Use new_action instead. This will be removed in v2.0.0',
+      // Implementation
+    });
+    ```
+  </Step>
+
+  <Step title="Add New Version">
+    Create the new version alongside:
+    
+    ```typescript
+    export const newAction = createAction({
+      name: 'new_action',
+      displayName: 'New Action',
+      description: 'Improved version with better features',
+      // New implementation
+    });
+    ```
+  </Step>
+
+  <Step title="Document Migration">
+    ```markdown MIGRATION.md
+    # Migration Guide: v1 to v2
+    
+    ## Breaking Changes
+    
+    ### Action: Send Message
+    
+    **What changed:**
+    - Property `channel_id` renamed to `channel`
+    - Property `text` is now required
+    - Output now includes `timestamp` field
+    
+    **Before (v1):**
+    ```typescript
+    {
+      channel_id: 'C1234567890',
+      text: 'Hello'
+    }
+    ```
+    
+    **After (v2):**
+    ```typescript
+    {
+      channel: 'C1234567890',  // Renamed
+      text: 'Hello'             // Now required
+    }
+    ```
+    ```
+  </Step>
+
+  <Step title="Bump Major Version">
+    ```json package.json
+    {
+      "version": "2.0.0"  // Was 1.x.x
+    }
+    ```
+  </Step>
+</Steps>
+
+### Backward Compatibility
+
+Maintain compatibility when possible:
+
+```typescript
+export const sendMessage = createAction({
+  name: 'send_message',
+  displayName: 'Send Message',
+  props: {
+    // New property name
+    channel: Property.ShortText({
+      displayName: 'Channel',
+      required: true,
+    }),
+    // Old property name (deprecated)
+    channel_id: Property.ShortText({
+      displayName: 'Channel ID (Deprecated)',
+      description: 'Use "channel" instead',
+      required: false,
+    }),
+    text: Property.LongText({
+      displayName: 'Message',
+      required: true,
+    }),
+  },
+  
+  async run(context) {
+    // Support both old and new property names
+    const channel = context.propsValue.channel || context.propsValue.channel_id;
+    
+    if (!channel) {
+      throw new Error('Channel is required');
+    }
+    
+    // Log deprecation warning
+    if (context.propsValue.channel_id) {
+      console.warn('channel_id is deprecated, use channel instead');
+    }
+    
+    // Implementation
+  },
+});
+```
+
+## Publishing Pieces
+
+### Community Pieces
+
+Community pieces are published automatically when your PR is merged:
+
+<Steps>
+  <Step title="Update Version">
+    ```json package.json
+    {
+      "version": "0.1.0"  // Increment appropriately
+    }
+    ```
+  </Step>
+
+  <Step title="Update Changelog">
+    ```markdown CHANGELOG.md
+    # Changelog
+    
+    ## [0.1.0] - 2024-01-15
+    
+    ### Added
+    - New "Update Message" action
+    - Support for message threading
+    
+    ### Fixed
+    - Error handling in send message action
+    
+    ### Changed
+    - Improved channel selector performance
+    ```
+  </Step>
+
+  <Step title="Create Pull Request">
+    Submit PR with version bump and changelog
+  </Step>
+
+  <Step title="Automatic Publication">
+    Once merged:
+    1. CI/CD builds the piece
+    2. Runs tests
+    3. Publishes to npmjs.com
+    4. Available in next release
+  </Step>
+</Steps>
+
+### Private Pieces
+
+Publish to your private registry:
+
+```bash
+# Build piece
+npm run build-piece -- --name my-piece
+
+# Navigate to dist
+cd dist/
+
+# Publish
+npm publish --registry https://npm.company.com
+```
+
+## Version Constraints
+
+### Minimum Supported Release
+
+Specify minimum Activepieces version:
+
+```typescript
+export const myPiece = createPiece({
+  displayName: 'My Piece',
+  minimumSupportedRelease: '0.30.0',  // Requires AP >= 0.30.0
+  // ...
+});
+```
+
+### Maximum Supported Release
+
+Optionally set maximum version (for deprecation):
+
+```typescript
+export const myPiece = createPiece({
+  displayName: 'My Piece',
+  minimumSupportedRelease: '0.30.0',
+  maximumSupportedRelease: '0.50.0',  // Not supported after 0.50.0
+  // ...
+});
+```
+
+## Changelog Best Practices
+
+Maintain a clear changelog:
+
+```markdown CHANGELOG.md
+# Changelog
+
+All notable changes to this piece will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+- New feature in development
+
+## [1.2.0] - 2024-01-15
+
+### Added
+- New "Delete Message" action
+- Support for message reactions
+- Dynamic channel dropdown
+
+### Changed
+- Improved error messages
+- Updated dependencies
+
+### Fixed
+- Fixed issue with long messages being truncated
+- Fixed authentication refresh logic
+
+## [1.1.0] - 2024-01-01
+
+### Added
+- New "Get Channel History" action
+
+### Fixed
+- Fixed webhook verification
+
+## [1.0.0] - 2023-12-15
+
+### Added
+- Initial stable release
+- Send message action
+- New message trigger
+- OAuth2 authentication
+
+### Changed
+- **BREAKING**: Renamed `channel_id` to `channel`
+- **BREAKING**: Made `text` property required
+
+### Removed
+- **BREAKING**: Removed deprecated `send_dm` action
+```
+
+## Version Comparison
+
+Check version compatibility:
+
+```typescript
+import * as semver from 'semver';
+
+// Check if piece supports platform version
+const pieceMinVersion = '0.30.0';
+const platformVersion = '0.32.5';
+
+if (semver.gte(platformVersion, pieceMinVersion)) {
+  console.log('Piece is compatible');
+} else {
+  console.log('Platform version too old');
+}
+
+// Check if version has breaking changes
+const oldVersion = '1.2.3';
+const newVersion = '2.0.0';
+
+if (semver.major(newVersion) > semver.major(oldVersion)) {
+  console.log('Breaking changes detected');
+}
+```
+
+## Deprecation Strategy
+
+### Marking as Deprecated
+
+```typescript
+export const oldAction = createAction({
+  name: 'old_action',
+  displayName: 'Old Action',
+  description: '⚠️ DEPRECATED: This action will be removed in v3.0.0. Use new_action instead.',
+  
+  async run(context) {
+    // Log deprecation warning
+    console.warn(
+      'Action "old_action" is deprecated and will be removed in v3.0.0. ' +
+      'Please migrate to "new_action".'
+    );
+    
+    // Implementation
+  },
+});
+```
+
+### Deprecation Timeline
+
+1. **Announce** deprecation in changelog
+2. **Mark** feature as deprecated
+3. **Wait** at least 2 minor versions
+4. **Remove** in next major version
+
+Example:
+```
+v1.5.0 - Mark feature as deprecated
+v1.6.0 - Still available (deprecated)
+v1.7.0 - Still available (deprecated)
+v2.0.0 - Feature removed
+```
+
+## Real-World Examples
+
+### Example 1: Slack Piece Evolution
+
+```
+v0.0.1 - Initial release with send message
+v0.1.0 - Add new message trigger
+v0.2.0 - Add file upload action
+v0.2.1 - Fix authentication bug
+v1.0.0 - Stable release
+v1.1.0 - Add reactions support
+v1.1.1 - Fix rate limiting
+v1.2.0 - Add Block Kit support
+v2.0.0 - Breaking: Remove legacy auth, require OAuth2
+```
+
+### Example 2: GitHub Piece Evolution
+
+```
+v0.0.1 - Initial release (create issue)
+v0.1.0 - Add create PR action
+v0.2.0 - Add webhooks for issues
+v0.2.1 - Fix issue labels
+v1.0.0 - Stable release
+v1.1.0 - Add GraphQL support
+v1.2.0 - Add GitHub Actions integration
+v2.0.0 - Breaking: Require fine-grained tokens
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Version Carefully">
+    - Start with 0.0.1
+    - Stay in 0.x during development
+    - Release 1.0.0 when stable
+    - Follow SemVer strictly after 1.0.0
+  </Accordion>
+
+  <Accordion title="Document Changes">
+    - Maintain CHANGELOG.md
+    - Document breaking changes
+    - Provide migration guides
+    - Update README
+  </Accordion>
+
+  <Accordion title="Communicate Deprecations">
+    - Announce in advance
+    - Provide alternatives
+    - Give sufficient warning period
+    - Show warnings in logs
+  </Accordion>
+
+  <Accordion title="Test Thoroughly">
+    - Test all version upgrades
+    - Verify backward compatibility
+    - Test migration paths
+    - Run integration tests
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Contribute" href="/pieces/contribute" icon="code-pull-request">
+    Submit your piece to the community
+  </Card>
+  <Card title="Testing" href="/pieces/testing" icon="flask">
+    Write comprehensive tests
+  </Card>
+</CardGroup>

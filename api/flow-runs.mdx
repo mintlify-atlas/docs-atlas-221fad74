@@ -1,0 +1,681 @@
+---
+title: 'Flow Runs API'
+description: 'Trigger, monitor, and manage flow execution runs'
+icon: 'play'
+---
+
+## Overview
+
+The Flow Runs API allows you to trigger flow executions, retrieve run details, monitor execution status, and manage running flows. Flow runs represent individual executions of your automation flows.
+
+## Base Endpoint
+
+```
+GET    /api/v1/flow-runs
+GET    /api/v1/flow-runs/:id
+POST   /api/v1/flow-runs/:id/retry
+POST   /api/v1/flow-runs/cancel
+POST   /api/v1/flow-runs/retry
+POST   /api/v1/flow-runs/archive
+```
+
+## List Flow Runs
+
+Retrieve a paginated list of flow runs with optional filters.
+
+```bash
+curl https://cloud.activepieces.com/api/v1/flow-runs?projectId=project_123&limit=20 \
+  -H "Authorization: Bearer sk-your-api-key"
+```
+
+### Query Parameters
+
+<ParamField query="projectId" type="string" required>
+  Filter runs by project ID
+</ParamField>
+
+<ParamField query="flowId" type="string">
+  Filter runs by specific flow ID
+</ParamField>
+
+<ParamField query="status" type="array">
+  Filter by run status. Multiple values allowed.
+  
+  Values: `RUNNING`, `SUCCEEDED`, `FAILED`, `PAUSED`, `QUOTA_EXCEEDED`, `INTERNAL_ERROR`, `TIMEOUT`, `STOPPED`
+</ParamField>
+
+<ParamField query="tags" type="array">
+  Filter runs by tags
+</ParamField>
+
+<ParamField query="failedStepName" type="string">
+  Filter runs that failed at a specific step
+</ParamField>
+
+<ParamField query="createdAfter" type="string">
+  ISO 8601 timestamp - Filter runs created after this time
+</ParamField>
+
+<ParamField query="createdBefore" type="string">
+  ISO 8601 timestamp - Filter runs created before this time
+</ParamField>
+
+<ParamField query="flowRunIds" type="array">
+  Filter by specific run IDs
+</ParamField>
+
+<ParamField query="includeArchived" type="boolean" default="false">
+  Include archived runs in the results
+</ParamField>
+
+<ParamField query="limit" type="number" default="10">
+  Number of runs to return (1-100)
+</ParamField>
+
+<ParamField query="cursor" type="string">
+  Pagination cursor from previous response
+</ParamField>
+
+### Response
+
+<ResponseField name="data" type="array">
+  Array of flow run objects (without step details for list view)
+  
+  <Expandable title="Flow Run Object">
+    <ResponseField name="id" type="string">
+      Unique identifier for the flow run
+    </ResponseField>
+    
+    <ResponseField name="projectId" type="string">
+      Project ID where the run occurred
+    </ResponseField>
+    
+    <ResponseField name="flowId" type="string">
+      ID of the flow that was executed
+    </ResponseField>
+    
+    <ResponseField name="flowVersionId" type="string">
+      Specific version of the flow that was executed
+    </ResponseField>
+    
+    <ResponseField name="flowVersion" type="object">
+      Flow version metadata
+      
+      <ResponseField name="displayName" type="string">
+        Name of the flow
+      </ResponseField>
+    </ResponseField>
+    
+    <ResponseField name="status" type="enum">
+      Execution status: `RUNNING`, `SUCCEEDED`, `FAILED`, `PAUSED`, `QUOTA_EXCEEDED`, `INTERNAL_ERROR`, `TIMEOUT`, `STOPPED`
+    </ResponseField>
+    
+    <ResponseField name="startTime" type="string">
+      ISO 8601 timestamp when execution started
+    </ResponseField>
+    
+    <ResponseField name="finishTime" type="string">
+      ISO 8601 timestamp when execution completed
+    </ResponseField>
+    
+    <ResponseField name="environment" type="enum">
+      Execution environment: `PRODUCTION` or `TESTING`
+    </ResponseField>
+    
+    <ResponseField name="triggeredBy" type="string">
+      User or system that triggered the run
+    </ResponseField>
+    
+    <ResponseField name="tags" type="array">
+      Tags associated with the run
+    </ResponseField>
+    
+    <ResponseField name="failedStep" type="object">
+      Information about the failed step if status is FAILED
+      
+      <ResponseField name="name" type="string">
+        Internal name of the failed step
+      </ResponseField>
+      
+      <ResponseField name="displayName" type="string">
+        Display name of the failed step
+      </ResponseField>
+    </ResponseField>
+    
+    <ResponseField name="stepsCount" type="number">
+      Total number of steps executed
+    </ResponseField>
+    
+    <ResponseField name="archivedAt" type="string">
+      ISO 8601 timestamp when run was archived (null if not archived)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="next" type="string">
+  Cursor for next page (null if no more results)
+</ResponseField>
+
+<ResponseField name="previous" type="string">
+  Cursor for previous page (null if on first page)
+</ResponseField>
+
+```json Response Example
+{
+  "data": [
+    {
+      "id": "run_abc123",
+      "projectId": "project_123",
+      "flowId": "flow_xyz789",
+      "flowVersionId": "version_456",
+      "flowVersion": {
+        "displayName": "Customer Onboarding"
+      },
+      "status": "SUCCEEDED",
+      "startTime": "2024-01-15T10:30:00.000Z",
+      "finishTime": "2024-01-15T10:30:15.000Z",
+      "environment": "PRODUCTION",
+      "triggeredBy": "user_789",
+      "tags": ["onboarding", "customer"],
+      "stepsCount": 5,
+      "archivedAt": null,
+      "created": "2024-01-15T10:30:00.000Z"
+    }
+  ],
+  "next": "eyJpZCI6InJ1bl9hYmMxMjMifQ==",
+  "previous": null
+}
+```
+
+## Get Flow Run
+
+Retrieve detailed information about a specific flow run, including step execution data.
+
+```bash
+curl https://cloud.activepieces.com/api/v1/flow-runs/run_abc123 \
+  -H "Authorization: Bearer sk-your-api-key"
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The flow run ID
+</ParamField>
+
+### Response
+
+Returns the complete flow run object including step-by-step execution data.
+
+<ResponseField name="steps" type="object">
+  Dictionary of step execution results, keyed by step name. Contains input data, output data, duration, and status for each executed step.
+  
+  <Note>
+  Step data may be missing if:
+  - The run has not started yet
+  - The run is older than `AP_EXECUTION_DATA_RETENTION_DAYS` and data has been purged
+  </Note>
+</ResponseField>
+
+<ResponseField name="logsFileId" type="string">
+  ID of the file containing execution logs
+</ResponseField>
+
+```json Response Example
+{
+  "id": "run_abc123",
+  "projectId": "project_123",
+  "flowId": "flow_xyz789",
+  "status": "SUCCEEDED",
+  "startTime": "2024-01-15T10:30:00.000Z",
+  "finishTime": "2024-01-15T10:30:15.000Z",
+  "environment": "PRODUCTION",
+  "steps": {
+    "trigger": {
+      "type": "WEBHOOK",
+      "output": { /* webhook payload */ },
+      "duration": 50
+    },
+    "send_email": {
+      "type": "ACTION",
+      "input": { /* action input */ },
+      "output": { /* action output */ },
+      "status": "SUCCEEDED",
+      "duration": 1200
+    }
+  },
+  "logsFileId": "file_logs_123"
+}
+```
+
+## Retry Flow Run
+
+Retry a failed or stopped flow run.
+
+```bash
+curl -X POST https://cloud.activepieces.com/api/v1/flow-runs/run_abc123/retry \
+  -H "Authorization: Bearer sk-your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "strategy": "FROM_FAILED_STEP",
+    "projectId": "project_123"
+  }'
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The flow run ID to retry
+</ParamField>
+
+### Request Body
+
+<ParamField body="strategy" type="enum" required>
+  Retry strategy to use:
+  
+  - `FROM_FAILED_STEP` - Resume from the failed step, preserving previous step outputs
+  - `ON_LATEST_VERSION` - Restart the entire flow using the latest published version
+</ParamField>
+
+<ParamField body="projectId" type="string" required>
+  Project ID (for authorization)
+</ParamField>
+
+### Response
+
+Returns the new flow run object created by the retry operation.
+
+<Info>
+**Retry Strategies Explained:**
+
+- **FROM_FAILED_STEP**: Efficient for transient failures. Reuses successful step outputs and only re-executes from the point of failure.
+- **ON_LATEST_VERSION**: Useful when you've fixed the flow definition. Starts fresh with the latest flow version.
+</Info>
+
+## Bulk Cancel Flow Runs
+
+Cancel multiple paused or queued flow runs at once.
+
+```bash
+curl -X POST https://cloud.activepieces.com/api/v1/flow-runs/cancel \
+  -H "Authorization: Bearer sk-your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "flowId": "flow_xyz789",
+    "status": ["PAUSED", "RUNNING"]
+  }'
+```
+
+### Request Body
+
+<ParamField body="flowRunIds" type="array">
+  Specific run IDs to cancel. If provided, other filters are ignored.
+</ParamField>
+
+<ParamField body="excludeFlowRunIds" type="array">
+  Run IDs to exclude from cancellation
+</ParamField>
+
+<ParamField body="flowId" type="string">
+  Cancel all runs for a specific flow
+</ParamField>
+
+<ParamField body="status" type="array">
+  Cancel runs with specific statuses: `PAUSED`, `RUNNING`
+</ParamField>
+
+<ParamField body="createdAfter" type="string">
+  Cancel runs created after this timestamp
+</ParamField>
+
+<ParamField body="createdBefore" type="string">
+  Cancel runs created before this timestamp
+</ParamField>
+
+### Response
+
+```json
+{
+  "cancelled": 5
+}
+```
+
+## Bulk Retry Flow Runs
+
+Retry multiple failed flow runs at once.
+
+```bash
+curl -X POST https://cloud.activepieces.com/api/v1/flow-runs/retry \
+  -H "Authorization: Bearer sk-your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "flowId": "flow_xyz789",
+    "strategy": "FROM_FAILED_STEP",
+    "status": ["FAILED"],
+    "createdAfter": "2024-01-15T00:00:00.000Z"
+  }'
+```
+
+### Request Body
+
+<ParamField body="strategy" type="enum" required>
+  Retry strategy: `FROM_FAILED_STEP` or `ON_LATEST_VERSION`
+</ParamField>
+
+<ParamField body="flowRunIds" type="array">
+  Specific run IDs to retry
+</ParamField>
+
+<ParamField body="excludeFlowRunIds" type="array">
+  Run IDs to exclude from retry
+</ParamField>
+
+<ParamField body="flowId" type="string">
+  Retry all runs for a specific flow
+</ParamField>
+
+<ParamField body="status" type="array">
+  Retry runs with specific statuses
+</ParamField>
+
+<ParamField body="failedStepName" type="string">
+  Retry runs that failed at a specific step
+</ParamField>
+
+<ParamField body="createdAfter" type="string">
+  Retry runs created after this timestamp
+</ParamField>
+
+<ParamField body="createdBefore" type="string">
+  Retry runs created before this timestamp
+</ParamField>
+
+### Response
+
+```json
+{
+  "retried": 12
+}
+```
+
+## Bulk Archive Flow Runs
+
+Archive multiple flow runs to clean up your run history.
+
+```bash
+curl -X POST https://cloud.activepieces.com/api/v1/flow-runs/archive \
+  -H "Authorization: Bearer sk-your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "flowId": "flow_xyz789",
+    "status": ["SUCCEEDED"],
+    "createdBefore": "2024-01-01T00:00:00.000Z"
+  }'
+```
+
+### Request Body
+
+Accepts the same filters as bulk retry (except `strategy`).
+
+<ParamField body="flowRunIds" type="array">
+  Specific run IDs to archive
+</ParamField>
+
+<ParamField body="excludeFlowRunIds" type="array">
+  Run IDs to exclude from archiving
+</ParamField>
+
+<ParamField body="flowId" type="string">
+  Archive runs for a specific flow
+</ParamField>
+
+<ParamField body="status" type="array">
+  Archive runs with specific statuses
+</ParamField>
+
+<ParamField body="failedStepName" type="string">
+  Archive runs that failed at a specific step
+</ParamField>
+
+<ParamField body="createdAfter" type="string">
+  Archive runs created after this timestamp
+</ParamField>
+
+<ParamField body="createdBefore" type="string">
+  Archive runs created before this timestamp
+</ParamField>
+
+### Response
+
+```json
+{
+  "archived": 150
+}
+```
+
+<Note>
+Archived runs are not deleted but are excluded from default list queries unless `includeArchived=true` is specified.
+</Note>
+
+## Resume Paused Run (Human Input)
+
+Resume a paused flow run that's waiting for human input.
+
+```bash
+curl -X POST https://cloud.activepieces.com/api/v1/flow-runs/run_abc123/requests/req_xyz/sync \
+  -H "Content-Type: application/json" \
+  -d '{
+    "approved": true,
+    "comments": "Looks good!"
+  }'
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The flow run ID
+</ParamField>
+
+<ParamField path="requestId" type="string" required>
+  The request ID for the human input step
+</ParamField>
+
+### Request Body
+
+The body should contain the response data expected by the human input step.
+
+### Response
+
+Returns the step's response after processing the input. For synchronous requests (`/sync` endpoint), returns the output immediately.
+
+## Flow Run Status
+
+### Status Types
+
+| Status | Description |
+|--------|-------------|
+| `RUNNING` | Flow is currently executing |
+| `SUCCEEDED` | Flow completed successfully |
+| `FAILED` | Flow failed during execution |
+| `PAUSED` | Flow is waiting for human input or approval |
+| `QUOTA_EXCEEDED` | Flow stopped due to quota limits |
+| `INTERNAL_ERROR` | Internal system error occurred |
+| `TIMEOUT` | Flow exceeded maximum execution time |
+| `STOPPED` | Flow was manually stopped |
+
+### Run Environments
+
+- `PRODUCTION` - Live executions triggered by real events
+- `TESTING` - Test runs triggered from the flow builder
+
+## Nested Flow Runs
+
+Flows can trigger other flows, creating parent-child relationships.
+
+### Headers for Nested Runs
+
+| Header | Description |
+|--------|-------------|
+| `ap-parent-run-id` | ID of the parent flow run |
+| `ap-fail-parent-on-failure` | If `true`, parent run fails when child fails |
+
+```bash
+curl -X POST https://cloud.activepieces.com/api/v1/flows/flow_xyz/run \
+  -H "Authorization: Bearer sk-your-api-key" \
+  -H "ap-parent-run-id: run_parent123" \
+  -H "ap-fail-parent-on-failure: true" \
+  -H "Content-Type: application/json" \
+  -d '{ /* trigger payload */ }'
+```
+
+## Data Retention
+
+<Warning>
+Flow run execution data (steps, logs) is retained for a configurable period defined by `AP_EXECUTION_DATA_RETENTION_DAYS`. After this period:
+
+- Run metadata (status, timestamps) is preserved
+- Step execution data is purged
+- Logs are removed
+
+This helps manage storage costs for high-volume automations.
+</Warning>
+
+## Error Responses
+
+### Run Not Found (404)
+
+```json
+{
+  "statusCode": 404,
+  "code": "ENTITY_NOT_FOUND",
+  "params": {
+    "entityType": "flow_run",
+    "entityId": "run_abc123",
+    "message": "Flow run not found"
+  }
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Monitoring Runs">
+    - Use tags to categorize and filter runs
+    - Set up alerts for failed runs
+    - Regularly review `failedStepName` to identify problematic steps
+    - Monitor `stepsCount` and execution duration for performance
+  </Accordion>
+  
+  <Accordion title="Retry Strategy">
+    - Use `FROM_FAILED_STEP` for transient failures (network issues, rate limits)
+    - Use `ON_LATEST_VERSION` after fixing flow logic
+    - Implement exponential backoff for bulk retries
+    - Consider max retry limits to avoid infinite loops
+  </Accordion>
+  
+  <Accordion title="Data Management">
+    - Archive old successful runs to improve query performance
+    - Use date filters to query recent runs
+    - Export important run data before retention period expires
+    - Use pagination cursors for large result sets
+  </Accordion>
+  
+  <Accordion title="Performance">
+    - Filter by `flowId` to reduce result set size
+    - Use `includeArchived=false` (default) for faster queries
+    - Avoid retrieving step data unless necessary
+    - Cache run statuses when polling
+  </Accordion>
+</AccordionGroup>
+
+## Code Examples
+
+<CodeGroup>
+```typescript Node.js
+import axios from 'axios';
+
+const client = axios.create({
+  baseURL: 'https://cloud.activepieces.com/api/v1',
+  headers: {
+    'Authorization': `Bearer ${process.env.ACTIVEPIECES_API_KEY}`
+  }
+});
+
+// List recent failed runs
+const { data } = await client.get('/flow-runs', {
+  params: {
+    projectId: 'project_123',
+    status: ['FAILED'],
+    limit: 50
+  }
+});
+
+console.log(`Found ${data.data.length} failed runs`);
+
+// Retry all failed runs from last 24 hours
+const yesterday = new Date(Date.now() - 86400000).toISOString();
+
+const retryResult = await client.post('/flow-runs/retry', {
+  flowId: 'flow_xyz789',
+  strategy: 'FROM_FAILED_STEP',
+  status: ['FAILED'],
+  createdAfter: yesterday
+});
+
+console.log(`Retried ${retryResult.data.retried} runs`);
+```
+
+```python Python
+import requests
+import os
+from datetime import datetime, timedelta
+
+API_KEY = os.environ['ACTIVEPIECES_API_KEY']
+BASE_URL = 'https://cloud.activepieces.com/api/v1'
+
+headers = {
+    'Authorization': f'Bearer {API_KEY}',
+    'Content-Type': 'application/json'
+}
+
+# List recent failed runs
+response = requests.get(
+    f'{BASE_URL}/flow-runs',
+    headers=headers,
+    params={
+        'projectId': 'project_123',
+        'status': ['FAILED'],
+        'limit': 50
+    }
+)
+
+runs = response.json()
+print(f"Found {len(runs['data'])} failed runs")
+
+# Retry all failed runs from last 24 hours
+yesterday = (datetime.now() - timedelta(days=1)).isoformat()
+
+retry_response = requests.post(
+    f'{BASE_URL}/flow-runs/retry',
+    headers=headers,
+    json={
+        'flowId': 'flow_xyz789',
+        'strategy': 'FROM_FAILED_STEP',
+        'status': ['FAILED'],
+        'createdAfter': yesterday
+    }
+)
+
+print(f"Retried {retry_response.json()['retried']} runs")
+```
+</CodeGroup>
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Flows API" icon="diagram-project" href="/api/flows">
+    Manage the flows that create these runs
+  </Card>
+  <Card title="Connections API" icon="link" href="/api/connections">
+    Manage connections used during execution
+  </Card>
+</CardGroup>

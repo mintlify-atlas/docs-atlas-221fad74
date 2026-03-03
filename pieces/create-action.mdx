@@ -1,0 +1,584 @@
+---
+title: Create an Action
+description: Build actions that perform operations in your piece
+---
+
+## What are Actions?
+
+Actions are operations that users can perform in their flows. They take inputs (props), execute logic, and return outputs. Think of them as functions that can be called from automation workflows.
+
+Examples:
+- Send a message to Slack
+- Create an issue in GitHub
+- Upload a file to Google Drive
+- Query a database
+
+## Creating Your First Action
+
+Use the CLI to generate an action:
+
+```bash
+npm run create-action
+```
+
+You'll be prompted for:
+- **Piece name**: Which piece to add the action to
+- **Action name**: Unique identifier (e.g., `send_message`)
+- **Display name**: Human-readable name (e.g., `Send Message`)
+- **Description**: What the action does
+
+## Action Structure
+
+Here's a real example from the GitHub piece:
+
+```typescript packages/pieces/community/github/src/lib/actions/create-issue.ts
+import { createAction, Property } from '@activepieces/pieces-framework';
+import { githubAuth } from '../auth';
+import { githubCommon } from '../common';
+import { HttpMethod } from '@activepieces/pieces-common';
+
+export const githubCreateIssueAction = createAction({
+  // Authentication requirement
+  auth: githubAuth,
+  
+  // Unique identifier
+  name: 'github_create_issue',
+  
+  // Display information
+  displayName: 'Create Issue',
+  description: 'Create Issue in GitHub Repository',
+  
+  // Input properties
+  props: {
+    repository: githubCommon.repositoryDropdown,
+    title: Property.ShortText({
+      displayName: 'Title',
+      description: 'The title of the issue',
+      required: true,
+    }),
+    description: Property.LongText({
+      displayName: 'Description',
+      description: 'The description of the issue',
+      required: false,
+    }),
+    labels: githubCommon.labelDropDown(),
+    assignees: githubCommon.assigneeDropDown(),
+  },
+  
+  // Execution logic
+  async run({ auth, propsValue }) {
+    const { title, assignees, labels, description } = propsValue;
+    const { owner, repo } = propsValue.repository;
+
+    const issueFields = {
+      title,
+      body: description,
+      labels: labels || [],
+      assignees: assignees || [],
+    };
+
+    const response = await githubApiCall({
+      accessToken: auth.access_token,
+      method: HttpMethod.POST,
+      resourceUri: `/repos/${owner}/${repo}/issues`,
+      body: issueFields,
+    });
+
+    return response;
+  },
+});
+```
+
+## Action Configuration
+
+<ParamField path="name" type="string" required>
+  Unique identifier for the action within the piece. Use snake_case.
+  
+  Example: `send_message`, `create_issue`, `upload_file`
+</ParamField>
+
+<ParamField path="displayName" type="string" required>
+  Human-readable name shown in the UI. Use Title Case.
+  
+  Example: `Send Message`, `Create Issue`, `Upload File`
+</ParamField>
+
+<ParamField path="description" type="string" required>
+  Brief description of what the action does. Shown as a tooltip.
+  
+  Example: `Send a message to a Slack channel`
+</ParamField>
+
+<ParamField path="auth" type="PieceAuth">
+  Authentication configuration. References the piece's auth.
+  
+  ```typescript
+  auth: slackAuth
+  ```
+</ParamField>
+
+<ParamField path="props" type="Record<string, Property>" required>
+  Input properties that users configure. See [Properties](/pieces/properties).
+  
+  ```typescript
+  props: {
+    channel: Property.ShortText({
+      displayName: 'Channel',
+      required: true,
+    }),
+    message: Property.LongText({
+      displayName: 'Message',
+      required: true,
+    }),
+  }
+  ```
+</ParamField>
+
+<ParamField path="run" type="function" required>
+  The main execution function. Receives context with auth and prop values.
+  
+  ```typescript
+  async run(context) {
+    const { auth, propsValue } = context;
+    // Your logic here
+    return result;
+  }
+  ```
+</ParamField>
+
+<ParamField path="test" type="function">
+  Optional test function for validating the action works. If not provided, `run` is used for testing.
+</ParamField>
+
+<ParamField path="requireAuth" type="boolean" default="true">
+  Whether authentication is required. Set to `false` for public APIs.
+</ParamField>
+
+## Complete Action Examples
+
+<Tabs>
+  <Tab title="Slack Send Message">
+    ```typescript
+    import { createAction, Property } from '@activepieces/pieces-framework';
+    import { slackAuth } from '../auth';
+
+    export const slackSendMessageAction = createAction({
+      auth: slackAuth,
+      name: 'send_channel_message',
+      displayName: 'Send Message To A Channel',
+      description: 'Send message to a channel',
+      
+      props: {
+        channel: Property.Dropdown({
+          displayName: 'Channel',
+          required: true,
+          refreshers: [],
+          options: async ({ auth }) => {
+            // Fetch channels from Slack API
+            const response = await fetch(
+              'https://slack.com/api/conversations.list',
+              {
+                headers: {
+                  Authorization: `Bearer ${auth.access_token}`,
+                },
+              }
+            );
+            const data = await response.json();
+            
+            return {
+              options: data.channels.map((channel) => ({
+                label: channel.name,
+                value: channel.id,
+              })),
+            };
+          },
+        }),
+        text: Property.LongText({
+          displayName: 'Message',
+          description: 'The text of your message',
+          required: true,
+        }),
+        threadTs: Property.ShortText({
+          displayName: 'Thread Timestamp',
+          description: 'Reply to a thread by providing the parent message timestamp',
+          required: false,
+        }),
+      },
+      
+      async run(context) {
+        const { channel, text, threadTs } = context.propsValue;
+        const token = context.auth.access_token;
+
+        const response = await fetch(
+          'https://slack.com/api/chat.postMessage',
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              channel,
+              text,
+              thread_ts: threadTs,
+            }),
+          }
+        );
+
+        return await response.json();
+      },
+    });
+    ```
+  </Tab>
+
+  <Tab title="OpenAI Completion">
+    ```typescript
+    import { createAction, Property } from '@activepieces/pieces-framework';
+    import { openaiAuth } from '../auth';
+
+    export const createCompletion = createAction({
+      auth: openaiAuth,
+      name: 'create_completion',
+      displayName: 'Create Completion',
+      description: 'Generate text completion using GPT',
+      
+      props: {
+        model: Property.StaticDropdown({
+          displayName: 'Model',
+          required: true,
+          options: {
+            options: [
+              { label: 'GPT-4', value: 'gpt-4' },
+              { label: 'GPT-3.5 Turbo', value: 'gpt-3.5-turbo' },
+            ],
+          },
+        }),
+        prompt: Property.LongText({
+          displayName: 'Prompt',
+          description: 'The prompt to generate completion for',
+          required: true,
+        }),
+        maxTokens: Property.Number({
+          displayName: 'Max Tokens',
+          description: 'Maximum number of tokens to generate',
+          required: false,
+          defaultValue: 100,
+        }),
+        temperature: Property.Number({
+          displayName: 'Temperature',
+          description: 'Sampling temperature (0-2)',
+          required: false,
+          defaultValue: 0.7,
+        }),
+      },
+      
+      async run(context) {
+        const { model, prompt, maxTokens, temperature } = context.propsValue;
+        const apiKey = context.auth;
+
+        const response = await fetch(
+          'https://api.openai.com/v1/chat/completions',
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model,
+              messages: [{ role: 'user', content: prompt }],
+              max_tokens: maxTokens,
+              temperature,
+            }),
+          }
+        );
+
+        const data = await response.json();
+        return {
+          text: data.choices[0].message.content,
+          usage: data.usage,
+        };
+      },
+    });
+    ```
+  </Tab>
+
+  <Tab title="HTTP Request">
+    ```typescript
+    import { createAction, Property } from '@activepieces/pieces-framework';
+    import { HttpMethod, httpClient } from '@activepieces/pieces-common';
+
+    export const httpRequest = createAction({
+      name: 'http_request',
+      displayName: 'HTTP Request',
+      description: 'Make an HTTP request',
+      requireAuth: false,
+      
+      props: {
+        method: Property.StaticDropdown({
+          displayName: 'Method',
+          required: true,
+          options: {
+            options: [
+              { label: 'GET', value: 'GET' },
+              { label: 'POST', value: 'POST' },
+              { label: 'PUT', value: 'PUT' },
+              { label: 'DELETE', value: 'DELETE' },
+            ],
+          },
+        }),
+        url: Property.ShortText({
+          displayName: 'URL',
+          required: true,
+        }),
+        headers: Property.Object({
+          displayName: 'Headers',
+          required: false,
+        }),
+        body: Property.Json({
+          displayName: 'Body',
+          required: false,
+        }),
+      },
+      
+      async run(context) {
+        const { method, url, headers, body } = context.propsValue;
+
+        const response = await httpClient.sendRequest({
+          method: method as HttpMethod,
+          url,
+          headers: headers || {},
+          body,
+        });
+
+        return {
+          status: response.status,
+          headers: response.headers,
+          body: response.body,
+        };
+      },
+    });
+    ```
+  </Tab>
+</Tabs>
+
+## Action Context
+
+The `context` object passed to your `run` function contains:
+
+```typescript
+interface ActionContext {
+  // User's authenticated connection
+  auth: OAuth2PropertyValue | string | CustomAuthValue;
+  
+  // User-configured property values
+  propsValue: {
+    [key: string]: any;
+  };
+  
+  // Platform services
+  store: {
+    get<T>(key: string): Promise<T | null>;
+    put<T>(key: string, value: T): Promise<void>;
+    delete(key: string): Promise<void>;
+  };
+  
+  // File operations
+  files: {
+    write(data: Buffer): Promise<string>;
+  };
+  
+  // Server configuration
+  server: {
+    apiUrl: string;
+    publicUrl: string;
+  };
+}
+```
+
+### Using Context
+
+<CodeGroup>
+```typescript Authentication
+// OAuth2
+const token = context.auth.access_token;
+const userData = context.auth.data;
+
+// Secret Text (API Key)
+const apiKey = context.auth;
+
+// Custom Auth
+const { apiKey, apiSecret } = context.auth;
+```
+
+```typescript Properties
+const channel = context.propsValue.channel;
+const message = context.propsValue.message;
+const optional = context.propsValue.optional || 'default';
+```
+
+```typescript Storage
+// Save data between runs
+await context.store.put('lastId', response.id);
+
+// Retrieve saved data
+const lastId = await context.store.get<string>('lastId');
+
+// Delete data
+await context.store.delete('lastId');
+```
+
+```typescript Files
+// Write file and get URL
+const fileUrl = await context.files.write(buffer);
+
+// File URL can be used to download the file
+return { fileUrl };
+```
+</CodeGroup>
+
+## Error Handling
+
+Provide clear error messages to help users debug issues:
+
+```typescript
+async run(context) {
+  try {
+    const response = await fetch(url, options);
+    
+    if (!response.ok) {
+      // Provide specific error message
+      const error = await response.json();
+      throw new Error(`Failed to create issue: ${error.message}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    // Re-throw with helpful context
+    if (error.message.includes('404')) {
+      throw new Error('Repository not found. Please check the repository name.');
+    }
+    if (error.message.includes('401')) {
+      throw new Error('Authentication failed. Please reconnect your account.');
+    }
+    throw error;
+  }
+}
+```
+
+## Testing Actions
+
+Test your action during development:
+
+<Steps>
+  <Step title="Start Dev Server">
+    ```bash
+    npm run dev
+    ```
+  </Step>
+
+  <Step title="Create Test Flow">
+    1. Go to `http://localhost:4200`
+    2. Create a new flow
+    3. Add your action as a step
+  </Step>
+
+  <Step title="Configure & Test">
+    1. Fill in the required properties
+    2. Click "Test" button
+    3. Check the output
+  </Step>
+
+  <Step title="Iterate">
+    Make changes to your action code - they'll be reflected immediately thanks to hot reloading
+  </Step>
+</Steps>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Return Useful Data">
+    Return structured data that can be used in subsequent steps:
+    
+    ```typescript
+    // Good: Structured output
+    return {
+      id: response.id,
+      url: response.url,
+      created_at: response.created_at,
+    };
+    
+    // Bad: Raw response
+    return response;
+    ```
+  </Accordion>
+
+  <Accordion title="Validate Inputs">
+    Check inputs before making API calls:
+    
+    ```typescript
+    if (!context.propsValue.email.includes('@')) {
+      throw new Error('Invalid email address');
+    }
+    
+    if (context.propsValue.quantity < 1) {
+      throw new Error('Quantity must be at least 1');
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Use Descriptive Names">
+    Make property names clear and self-documenting:
+    
+    ```typescript
+    // Good
+    props: {
+      channelId: Property.ShortText({
+        displayName: 'Channel ID',
+        description: 'The Slack channel ID (e.g., C1234567890)',
+        required: true,
+      }),
+    }
+    
+    // Bad
+    props: {
+      id: Property.ShortText({
+        displayName: 'ID',
+        required: true,
+      }),
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Handle Rate Limits">
+    Implement retry logic for rate-limited APIs:
+    
+    ```typescript
+    import { httpClient } from '@activepieces/pieces-common';
+    
+    const response = await httpClient.sendRequest({
+      method: HttpMethod.POST,
+      url: apiUrl,
+      headers: headers,
+      body: body,
+      // Automatically retry on rate limit
+      retries: 3,
+      retryDelay: 1000,
+    });
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Create Triggers" href="/pieces/create-trigger" icon="bolt">
+    Learn how to create triggers
+  </Card>
+  <Card title="Properties Guide" href="/pieces/properties" icon="sliders">
+    Explore all property types
+  </Card>
+  <Card title="Testing" href="/pieces/testing" icon="flask">
+    Write tests for your actions
+  </Card>
+</CardGroup>

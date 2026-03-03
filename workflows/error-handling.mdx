@@ -1,0 +1,678 @@
+---
+title: Error Handling
+description: Build resilient workflows with proper error handling, retry logic, and failure notifications
+icon: 'shield'
+---
+
+Workflows can fail for many reasons: API downtime, invalid data, network issues, or bugs. Proper error handling ensures your workflows are resilient and can recover from failures gracefully.
+
+## Understanding Flow Failures
+
+When a step in your workflow fails, the default behavior is to stop execution:
+
+```typescript
+// From packages/shared/src/lib/automation/flow-run/execution/flow-execution.ts
+export enum FlowRunStatus {
+  RUNNING = 'RUNNING',
+  SUCCEEDED = 'SUCCEEDED',
+  FAILED = 'FAILED',
+  PAUSED = 'PAUSED',
+  STOPPED = 'STOPPED'
+}
+```
+
+<Note>
+A failed step causes the entire workflow to stop with status `FAILED`, and subsequent steps don't execute.
+</Note>
+
+## Error Handling Options
+
+Every action step in Activepieces supports error handling configuration:
+
+```typescript
+// From packages/shared/src/lib/automation/flows/actions/action.ts
+export const ActionErrorHandlingOptions = {
+  "continueOnFailure": {
+    "value": boolean  // Continue flow even if step fails
+  },
+  "retryOnFailure": {
+    "value": boolean  // Retry step on failure
+  }
+}
+```
+
+### Configure Error Handling
+
+<Steps>
+  <Step title="Select a Step">
+    Click on any action step in your workflow.
+  </Step>
+
+  <Step title="Open Error Handling">
+    In the step configuration panel, find the **Error Handling** section.
+  </Step>
+
+  <Step title="Enable Options">
+    Toggle the options you need:
+
+    - **Continue on Failure**: Flow continues even if this step fails
+    - **Retry on Failure**: Automatically retry the step before failing
+  </Step>
+</Steps>
+
+## Continue on Failure
+
+When enabled, the workflow continues executing even if the step fails:
+
+```typescript
+// From packages/server/engine/test/handler/flow-error-handling.test.ts
+{
+  "name": "risky_operation",
+  "type": "CODE",
+  "settings": {
+    "sourceCode": {
+      "code": "export const code = async () => { throw new Error('Intentional error'); }"
+    },
+    "errorHandlingOptions": {
+      "continueOnFailure": {
+        "value": true  // Workflow continues
+      },
+      "retryOnFailure": {
+        "value": false
+      }
+    }
+  }
+}
+
+// Result:
+{
+  "verdict": {
+    "status": "RUNNING"  // Flow continues!
+  },
+  "steps": {
+    "risky_operation": {
+      "status": "FAILED",
+      "errorMessage": "Custom Runtime Error"
+    }
+  }
+}
+```
+
+### When to Use
+
+<CardGroup cols={2}>
+  <Card title="Optional Operations" icon="circle-question">
+    Non-critical steps like logging, analytics, or notifications.
+  </Card>
+
+  <Card title="Fallback Logic" icon="arrow-turn-down">
+    When you have alternative steps to handle failures.
+  </Card>
+
+  <Card title="Best Effort" icon="hand-holding-heart">
+    Operations that should try but not block the workflow.
+  </Card>
+
+  <Card title="Parallel Operations" icon="arrows-left-right">
+    When processing multiple items and some can fail.
+  </Card>
+</CardGroup>
+
+### Example: Optional Notification
+
+```typescript
+{
+  "name": "send_slack_notification",
+  "type": "PIECE",
+  "settings": {
+    "pieceName": "@activepieces/piece-slack",
+    "actionName": "send_message",
+    "input": {
+      "channel": "#notifications",
+      "text": "Order processed: {{ trigger.orderId }}"
+    },
+    "errorHandlingOptions": {
+      "continueOnFailure": {
+        "value": true  // Don't fail workflow if Slack is down
+      }
+    }
+  },
+  "nextAction": {
+    "name": "update_database",  // This still runs even if Slack fails
+    "type": "PIECE",
+    "settings": { /* ... */ }
+  }
+}
+```
+
+## Retry on Failure
+
+Automatically retry a step before marking it as failed:
+
+```typescript
+{
+  "name": "api_call",
+  "type": "PIECE",
+  "settings": {
+    "pieceName": "@activepieces/piece-http",
+    "actionName": "send_request",
+    "input": {
+      "method": "GET",
+      "url": "https://api.example.com/data"
+    },
+    "errorHandlingOptions": {
+      "retryOnFailure": {
+        "value": true  // Retry on failure
+      }
+    }
+  }
+}
+```
+
+<Note>
+Retries use exponential backoff to avoid overwhelming failing services.
+</Note>
+
+### When to Use
+
+<AccordionGroup>
+  <Accordion title="Network Requests">
+    API calls that might fail due to temporary network issues.
+
+    ```typescript
+    // HTTP requests, webhooks, external API calls
+    {
+      "errorHandlingOptions": {
+        "retryOnFailure": { "value": true }
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Rate Limited APIs">
+    Services that might return rate limit errors.
+
+    ```typescript
+    // APIs with rate limits
+    {
+      "pieceName": "@activepieces/piece-openai",
+      "errorHandlingOptions": {
+        "retryOnFailure": { "value": true }
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Database Operations">
+    Database queries that might face temporary connection issues.
+
+    ```typescript
+    // Database connections
+    {
+      "pieceName": "@activepieces/piece-postgresql",
+      "errorHandlingOptions": {
+        "retryOnFailure": { "value": true }
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="File Operations">
+    File uploads or downloads that might be interrupted.
+
+    ```typescript
+    // File operations
+    {
+      "actionName": "upload_file",
+      "errorHandlingOptions": {
+        "retryOnFailure": { "value": true }
+      }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Combining Error Handling Options
+
+You can enable both options for maximum resilience:
+
+```typescript
+{
+  "name": "best_effort_api_call",
+  "type": "PIECE",
+  "settings": {
+    "pieceName": "@activepieces/piece-http",
+    "actionName": "send_request",
+    "errorHandlingOptions": {
+      "retryOnFailure": {
+        "value": true  // Try multiple times
+      },
+      "continueOnFailure": {
+        "value": true  // But don't block workflow if all retries fail
+      }
+    }
+  }
+}
+```
+
+## Error Detection Patterns
+
+### Check Step Status
+
+In subsequent steps, check if a previous step failed:
+
+```typescript
+{
+  "name": "check_previous_step",
+  "type": "ROUTER",
+  "settings": {
+    "conditions": [[
+      {
+        "firstValue": "{{ api_call.status }}",
+        "operator": "TEXT_EXACTLY_MATCHES",
+        "secondValue": "SUCCEEDED"
+      }
+    ]]
+  },
+  "children": [
+    // Branch 1: API succeeded
+    {
+      "name": "process_data",
+      "settings": {
+        "input": {
+          "data": "{{ api_call.body }}"
+        }
+      }
+    },
+    // Branch 2: API failed, use fallback
+    {
+      "name": "use_cached_data",
+      "settings": {
+        "input": {
+          "data": "{{ cached_data.output }}"
+        }
+      }
+    }
+  ]
+}
+```
+
+### Handle Missing Data
+
+Use null coalescing for safe data access:
+
+```typescript
+{
+  "input": {
+    // Provide defaults if step failed
+    "userData": "{{ get_user.body ?? { name: 'Unknown', email: 'none' } }}",
+    "count": "{{ fetch_count.output ?? 0 }}"
+  }
+}
+```
+
+## Error Notification Patterns
+
+### Send Alert on Failure
+
+```typescript
+{
+  "name": "critical_operation",
+  "type": "PIECE",
+  "settings": { /* ... */ },
+  "nextAction": {
+    "name": "check_if_failed",
+    "type": "ROUTER",
+    "settings": {
+      "conditions": [[
+        {
+          "firstValue": "{{ critical_operation.status }}",
+          "operator": "TEXT_EXACTLY_MATCHES",
+          "secondValue": "FAILED"
+        }
+      ]]
+    },
+    "children": [
+      // Send alert if failed
+      {
+        "name": "send_alert",
+        "type": "PIECE",
+        "settings": {
+          "pieceName": "@activepieces/piece-gmail",
+          "actionName": "send_email",
+          "input": {
+            "to": "admin@example.com",
+            "subject": "Critical Operation Failed",
+            "body": "Error: {{ critical_operation.errorMessage }}"
+          }
+        }
+      },
+      // Continue normally if succeeded
+      null
+    ]
+  }
+}
+```
+
+### Log All Errors
+
+Create a dedicated error logging step:
+
+```typescript
+{
+  "name": "log_errors",
+  "type": "CODE",
+  "settings": {
+    "sourceCode": {
+      "code": `
+export const code = async (inputs) => {
+  const errors = [];
+  
+  // Check each step for failures
+  for (const [stepName, stepData] of Object.entries(inputs.steps)) {
+    if (stepData.status === 'FAILED') {
+      errors.push({
+        step: stepName,
+        error: stepData.errorMessage,
+        timestamp: new Date().toISOString()
+      });
+    }
+  }
+  
+  // Log to external service
+  if (errors.length > 0) {
+    await fetch('https://logging.example.com/errors', {
+      method: 'POST',
+      body: JSON.stringify({ flowId: inputs.flowId, errors })
+    });
+  }
+  
+  return errors;
+};
+      `
+    },
+    "input": {
+      "steps": "{{ $steps }}",  // All step results
+      "flowId": "{{ $flow.id }}"
+    }
+  }
+}
+```
+
+## Flow-Level Error Handling
+
+### Failed Step Information
+
+```typescript
+// From packages/shared/src/lib/automation/flow-run/flow-run.ts
+export type FlowRun = {
+  status: FlowRunStatus,
+  steps: Record<string, StepOutput>,
+  failedStep?: {
+    name: string,
+    displayName: string,
+    message: string
+  }
+}
+```
+
+When a flow fails, you can see which step caused the failure:
+
+```typescript
+{
+  "status": "FAILED",
+  "failedStep": {
+    "name": "send_http",
+    "displayName": "Send HTTP Request",
+    "message": "Request failed with status 404"
+  }
+}
+```
+
+### Retry Entire Flow
+
+```typescript
+// From packages/shared/src/lib/automation/flow-run/flow-run.ts
+export enum FlowRetryStrategy {
+  ON_LATEST_VERSION = 'ON_LATEST_VERSION',      // Retry with latest flow version
+  FROM_FAILED_STEP = 'FROM_FAILED_STEP'         // Resume from failed step
+}
+```
+
+<Tabs>
+  <Tab title="Manual Retry">
+    From the flow runs page, click **Retry** on a failed run.
+  </Tab>
+
+  <Tab title="Automatic Retry">
+    Configure automatic retries at the flow level (coming in future versions).
+  </Tab>
+</Tabs>
+
+## Error Handling in Loops
+
+When a step fails inside a loop:
+
+```typescript
+// From packages/server/engine/test/handler/flow-looping.test.ts
+{
+  "name": "bulk_process",
+  "type": "LOOP_ON_ITEMS",
+  "settings": {
+    "items": "{{ [4, 5, 6] }}"
+  },
+  "firstLoopAction": {
+    "name": "process_item",
+    "type": "CODE",
+    "settings": {
+      "sourceCode": {
+        "code": "export const code = async () => { throw new Error('Failed'); }"
+      },
+      "errorHandlingOptions": {
+        "continueOnFailure": {
+          "value": false  // Stop loop on first failure
+        }
+      }
+    }
+  }
+}
+
+// Result: Loop stops at first iteration
+{
+  "output": {
+    "iterations": [
+      {
+        "index": 1,
+        "item": 4,
+        "process_item": {
+          "status": "FAILED",
+          "errorMessage": "Failed"
+        }
+      }
+    ],
+    "index": 1,
+    "item": 4
+  }
+}
+```
+
+### Continue Loop on Errors
+
+To process all items even if some fail:
+
+```typescript
+{
+  "firstLoopAction": {
+    "name": "process_item",
+    "settings": {
+      "errorHandlingOptions": {
+        "continueOnFailure": {
+          "value": true  // Continue with next iteration
+        }
+      }
+    }
+  }
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Enable Retries for External APIs">
+    Always enable retry for external API calls that might be temporarily unavailable.
+
+    ```typescript
+    {
+      "errorHandlingOptions": {
+        "retryOnFailure": { "value": true }
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Use Continue on Failure Sparingly">
+    Only enable for truly optional steps. Critical operations should fail the workflow.
+
+    ```typescript
+    // Good: Optional analytics
+    { "continueOnFailure": true }
+    
+    // Bad: Critical database update
+    { "continueOnFailure": false }
+    ```
+  </Accordion>
+
+  <Accordion title="Validate Data Early">
+    Check data validity before expensive operations.
+
+    ```typescript
+    {
+      "name": "validate_input",
+      "type": "CODE",
+      "settings": {
+        "sourceCode": {
+          "code": `
+export const code = async (inputs) => {
+  if (!inputs.email || !inputs.email.includes('@')) {
+    throw new Error('Invalid email format');
+  }
+  return inputs;
+};
+          `
+        }
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Log Errors for Debugging">
+    Create a logging step that runs even on failures.
+
+    ```typescript
+    {
+      "name": "log_execution",
+      "errorHandlingOptions": {
+        "continueOnFailure": { "value": true }
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Test Failure Scenarios">
+    Test your workflows with:
+    - Invalid data
+    - Network timeouts
+    - API errors
+    - Missing required fields
+  </Accordion>
+</AccordionGroup>
+
+## Common Error Scenarios
+
+### HTTP 404 Errors
+
+```typescript
+// From packages/server/engine/test/handler/flow-error-handling.test.ts
+{
+  "send_http": {
+    "status": "FAILED",
+    "errorMessage": JSON.stringify({
+      "response": {
+        "status": 404,
+        "body": {
+          "statusCode": 404,
+          "error": "Not Found",
+          "message": "Route not found"
+        }
+      }
+    }, null, 2)
+  }
+}
+```
+
+### Runtime Errors in Code
+
+```typescript
+{
+  "runtime": {
+    "status": "FAILED",
+    "errorMessage": "Custom Runtime Error: Cannot read property 'name' of undefined"
+  }
+}
+```
+
+### Connection Errors
+
+```typescript
+{
+  "database_query": {
+    "status": "FAILED",
+    "errorMessage": "Connection timeout: Could not connect to database"
+  }
+}
+```
+
+## Debugging Failed Runs
+
+<Steps>
+  <Step title="View Run History">
+    Navigate to the **Runs** tab to see all executions.
+  </Step>
+
+  <Step title="Click Failed Run">
+    Click on a run with status `FAILED`.
+  </Step>
+
+  <Step title="Identify Failed Step">
+    The failed step is highlighted with error details.
+  </Step>
+
+  <Step title="Review Error Message">
+    Read the error message to understand what went wrong.
+  </Step>
+
+  <Step title="Check Step Input">
+    Verify the input data that caused the failure.
+  </Step>
+
+  <Step title="Fix and Retry">
+    Update the flow or data, then retry the run.
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Debugging" icon="bug" href="/workflows/debugging">
+    Learn how to debug workflows
+  </Card>
+  <Card title="Monitoring" icon="chart-line" href="/workflows/publishing">
+    Monitor workflow health
+  </Card>
+  <Card title="Loops & Branches" icon="code-branch" href="/workflows/loops-branches">
+    Handle errors in control flow
+  </Card>
+  <Card title="Best Practices" icon="star" href="/workflows/building-flows">
+    Build resilient workflows
+  </Card>
+</CardGroup>

@@ -1,0 +1,657 @@
+---
+title: Database Setup
+description: Configure PostgreSQL and SQLite databases for Activepieces
+---
+
+Activepieces uses a relational database to store workflows, executions, users, and all application data. PostgreSQL is required for production deployments.
+
+## Database Support
+
+<CardGroup cols={2}>
+  <Card title="PostgreSQL" icon="database">
+    **Production**
+    
+    Fully supported relational database with:
+    - ACID compliance
+    - Replication support
+    - Advanced querying
+    - Horizontal scaling
+    
+    **Minimum**: PostgreSQL 14
+    
+    **Recommended**: PostgreSQL 15 or 16
+  </Card>
+  
+  <Card title="SQLite" icon="hard-drive">
+    **Development Only**
+    
+    Embedded database for local development:
+    - No server setup needed
+    - File-based storage
+    - Limited concurrency
+    
+    <Warning>
+    Not suitable for production. Use PostgreSQL instead.
+    </Warning>
+  </Card>
+</CardGroup>
+
+## PostgreSQL Setup
+
+### Using Docker Compose
+
+The easiest way is to use the provided Docker Compose configuration:
+
+```yaml docker-compose.yml
+services:
+  postgres:
+    image: 'postgres:14.4'
+    container_name: postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=activepieces
+      - POSTGRES_PASSWORD=your_secure_password
+      - POSTGRES_USER=postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - '5432:5432'
+      
+volumes:
+  postgres_data:
+```
+
+Start PostgreSQL:
+
+```bash
+docker compose up -d postgres
+```
+
+### Manual Installation
+
+<Tabs>
+  <Tab title="Ubuntu/Debian">
+    ```bash
+    # Add PostgreSQL repository
+    sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+    wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+    
+    # Install PostgreSQL
+    sudo apt update
+    sudo apt install -y postgresql-15 postgresql-contrib-15
+    
+    # Start PostgreSQL
+    sudo systemctl start postgresql
+    sudo systemctl enable postgresql
+    ```
+  </Tab>
+  
+  <Tab title="macOS">
+    ```bash
+    # Using Homebrew
+    brew install postgresql@15
+    
+    # Start PostgreSQL
+    brew services start postgresql@15
+    ```
+  </Tab>
+  
+  <Tab title="Docker">
+    ```bash
+    docker run -d \
+      --name activepieces-postgres \
+      -e POSTGRES_DB=activepieces \
+      -e POSTGRES_USER=postgres \
+      -e POSTGRES_PASSWORD=your_password \
+      -v postgres_data:/var/lib/postgresql/data \
+      -p 5432:5432 \
+      postgres:15
+    ```
+  </Tab>
+</Tabs>
+
+### Create Database
+
+<Steps>
+  <Step title="Connect to PostgreSQL">
+    ```bash
+    sudo -u postgres psql
+    ```
+  </Step>
+  
+  <Step title="Create database">
+    ```sql
+    CREATE DATABASE activepieces;
+    ```
+  </Step>
+  
+  <Step title="Create user (optional)">
+    ```sql
+    CREATE USER activepieces_user WITH ENCRYPTED PASSWORD 'strong_password';
+    GRANT ALL PRIVILEGES ON DATABASE activepieces TO activepieces_user;
+    ```
+  </Step>
+  
+  <Step title="Verify connection">
+    ```bash
+    psql -h localhost -U postgres -d activepieces -c "SELECT version();"
+    ```
+  </Step>
+</Steps>
+
+## Database Configuration
+
+Configure Activepieces to connect to PostgreSQL:
+
+### Basic Configuration
+
+```bash .env
+# Database connection
+AP_POSTGRES_DATABASE=activepieces
+AP_POSTGRES_HOST=localhost
+AP_POSTGRES_PORT=5432
+AP_POSTGRES_USERNAME=postgres
+AP_POSTGRES_PASSWORD=your_secure_password
+```
+
+### Connection URL
+
+Alternatively, use a connection URL:
+
+```bash .env
+AP_POSTGRES_URL=postgresql://postgres:password@localhost:5432/activepieces
+```
+
+<Info>
+The connection URL format is: `postgresql://[user[:password]@][host][:port][/database][?param1=value1&...]`
+</Info>
+
+### SSL Configuration
+
+Enable SSL for secure connections:
+
+```bash .env
+AP_POSTGRES_USE_SSL=true
+AP_POSTGRES_SSL_CA=/path/to/ca-certificate.crt
+```
+
+With connection URL:
+
+```bash .env
+AP_POSTGRES_URL=postgresql://user:pass@host:5432/db?sslmode=require
+```
+
+SSL modes:
+- `disable`: No SSL
+- `require`: SSL required
+- `verify-ca`: Verify CA certificate
+- `verify-full`: Verify CA and hostname
+
+### Connection Pooling
+
+Configure connection pool for better performance:
+
+```bash .env
+# Maximum connections in pool
+AP_POSTGRES_POOL_SIZE=20
+
+# Idle connection timeout (milliseconds)
+AP_POSTGRES_IDLE_TIMEOUT_MS=30000
+```
+
+<Info>
+**Pool size guidelines:**
+- Development: 5-10
+- Production (single instance): 10-20
+- Production (multiple instances): Calculate `total_connections / instance_count`
+</Info>
+
+## Database Migrations
+
+Activepieces uses TypeORM for database migrations. Migrations run automatically on startup.
+
+### Migration Process
+
+When Activepieces starts:
+
+1. Connects to the database
+2. Checks for pending migrations
+3. Applies migrations in order
+4. Logs migration results
+
+Migrations are located in:
+- Community Edition: `packages/server/api/src/app/database/migration/`
+- Enterprise Edition: `packages/server/api/src/app/ee/database/migrations/`
+
+### Manual Migration
+
+To run migrations manually:
+
+```bash
+# Install dependencies
+npm install
+
+# Run migrations
+npm run migration:run
+
+# Revert last migration
+npm run migration:revert
+```
+
+### Database Entities
+
+Activepieces creates the following tables (source: `database-connection.ts:60`):
+
+<AccordionGroup>
+  <Accordion title="Core Entities" icon="table">
+    - **flow**: Workflow definitions
+    - **flow_version**: Workflow versions
+    - **flow_run**: Execution logs
+    - **project**: Projects (workspaces)
+    - **user**: User accounts
+    - **file**: File storage metadata
+    - **trigger_event**: Trigger events
+    - **app_connection**: OAuth and API connections
+  </Accordion>
+  
+  <Accordion title="Pieces & Integrations" icon="puzzle-piece">
+    - **piece_metadata**: Integration metadata
+    - **tag**: Tags for organizing pieces
+    - **piece_tag**: Many-to-many piece-tag relationships
+    - **app_event_routing**: Event routing rules
+    - **trigger_source**: Webhook trigger sources
+  </Accordion>
+  
+  <Accordion title="Storage" icon="database">
+    - **store_entry**: Key-value storage
+    - **table**: Database tables
+    - **field**: Table columns
+    - **record**: Table rows
+    - **cell**: Table cell values
+  </Accordion>
+  
+  <Accordion title="Enterprise" icon="building">
+    - **project_member**: Team members
+    - **project_role**: Custom roles
+    - **api_key**: API keys
+    - **audit_event**: Audit logs
+    - **custom_domain**: Custom domains
+    - **oauth_app**: Custom OAuth apps
+    - **signing_key**: JWT signing keys
+  </Accordion>
+</AccordionGroup>
+
+## Database Maintenance
+
+### Backups
+
+<Tabs>
+  <Tab title="pg_dump">
+    Create a full database backup:
+    
+    ```bash
+    # Backup to file
+    pg_dump -h localhost -U postgres activepieces > backup.sql
+    
+    # Backup with timestamp
+    pg_dump -h localhost -U postgres activepieces > backup-$(date +%Y%m%d-%H%M%S).sql
+    
+    # Compressed backup
+    pg_dump -h localhost -U postgres activepieces | gzip > backup.sql.gz
+    ```
+  </Tab>
+  
+  <Tab title="Docker">
+    Backup from Docker container:
+    
+    ```bash
+    # Using docker exec
+    docker exec postgres pg_dump -U postgres activepieces > backup.sql
+    
+    # Using docker compose
+    docker compose exec postgres pg_dump -U postgres activepieces > backup.sql
+    ```
+  </Tab>
+  
+  <Tab title="Automated">
+    Create a backup script:
+    
+    ```bash backup.sh
+    #!/bin/bash
+    
+    BACKUP_DIR="/var/backups/activepieces"
+    DATE=$(date +%Y%m%d-%H%M%S)
+    
+    mkdir -p $BACKUP_DIR
+    
+    pg_dump -h localhost -U postgres activepieces | gzip > $BACKUP_DIR/backup-$DATE.sql.gz
+    
+    # Keep only last 30 days
+    find $BACKUP_DIR -name "backup-*.sql.gz" -mtime +30 -delete
+    ```
+    
+    Schedule with cron:
+    ```bash
+    # Daily backup at 2 AM
+    0 2 * * * /path/to/backup.sh
+    ```
+  </Tab>
+</Tabs>
+
+### Restore
+
+<Steps>
+  <Step title="Stop Activepieces">
+    ```bash
+    docker compose stop activepieces
+    ```
+  </Step>
+  
+  <Step title="Drop database">
+    ```bash
+    psql -h localhost -U postgres -c "DROP DATABASE activepieces;"
+    ```
+  </Step>
+  
+  <Step title="Create new database">
+    ```bash
+    psql -h localhost -U postgres -c "CREATE DATABASE activepieces;"
+    ```
+  </Step>
+  
+  <Step title="Restore backup">
+    ```bash
+    # From SQL file
+    psql -h localhost -U postgres activepieces < backup.sql
+    
+    # From compressed file
+    gunzip -c backup.sql.gz | psql -h localhost -U postgres activepieces
+    ```
+  </Step>
+  
+  <Step title="Restart Activepieces">
+    ```bash
+    docker compose start activepieces
+    ```
+  </Step>
+</Steps>
+
+### Vacuum and Analyze
+
+Regularly optimize the database:
+
+```bash
+# Vacuum (reclaim space)
+psql -h localhost -U postgres -d activepieces -c "VACUUM;"
+
+# Analyze (update statistics)
+psql -h localhost -U postgres -d activepieces -c "ANALYZE;"
+
+# Full vacuum (locks tables)
+psql -h localhost -U postgres -d activepieces -c "VACUUM FULL;"
+```
+
+Automate with cron:
+
+```bash
+# Weekly vacuum on Sunday at 3 AM
+0 3 * * 0 psql -h localhost -U postgres -d activepieces -c "VACUUM ANALYZE;"
+```
+
+## Performance Tuning
+
+### PostgreSQL Configuration
+
+Edit `postgresql.conf` for better performance:
+
+```ini postgresql.conf
+# Memory settings
+shared_buffers = 256MB              # 25% of RAM
+effective_cache_size = 1GB          # 50% of RAM
+work_mem = 16MB                     # Per operation
+maintenance_work_mem = 128MB        # For maintenance
+
+# Connection settings
+max_connections = 100
+
+# Write-ahead log
+wal_buffers = 16MB
+checkpoint_completion_target = 0.9
+
+# Query planner
+random_page_cost = 1.1              # For SSD storage
+effective_io_concurrency = 200      # For SSD storage
+```
+
+Restart PostgreSQL after changes:
+
+```bash
+sudo systemctl restart postgresql
+```
+
+### Indexes
+
+Activepieces creates indexes automatically, but you can verify:
+
+```sql
+-- List all indexes
+SELECT tablename, indexname, indexdef 
+FROM pg_indexes 
+WHERE schemaname = 'public'
+ORDER BY tablename, indexname;
+
+-- Check index usage
+SELECT schemaname, tablename, indexname, idx_scan 
+FROM pg_stat_user_indexes 
+ORDER BY idx_scan DESC;
+```
+
+### Monitoring
+
+Monitor database performance:
+
+```sql
+-- Active connections
+SELECT count(*) FROM pg_stat_activity;
+
+-- Long-running queries
+SELECT pid, now() - pg_stat_activity.query_start AS duration, query 
+FROM pg_stat_activity 
+WHERE state = 'active' 
+ORDER BY duration DESC;
+
+-- Database size
+SELECT pg_size_pretty(pg_database_size('activepieces'));
+
+-- Table sizes
+SELECT 
+  tablename, 
+  pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS size
+FROM pg_tables 
+WHERE schemaname = 'public'
+ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC;
+```
+
+## High Availability
+
+### PostgreSQL Replication
+
+Setup master-replica replication:
+
+<Steps>
+  <Step title="Configure Master">
+    Edit `postgresql.conf` on master:
+    
+    ```ini
+    wal_level = replica
+    max_wal_senders = 3
+    wal_keep_size = 1GB
+    ```
+    
+    Edit `pg_hba.conf`:
+    
+    ```
+    host replication replicator 10.0.0.0/8 md5
+    ```
+  </Step>
+  
+  <Step title="Create replication user">
+    ```sql
+    CREATE USER replicator WITH REPLICATION ENCRYPTED PASSWORD 'password';
+    ```
+  </Step>
+  
+  <Step title="Setup replica">
+    ```bash
+    pg_basebackup -h master-host -U replicator -D /var/lib/postgresql/data -P
+    ```
+    
+    Create `standby.signal` file:
+    ```bash
+    touch /var/lib/postgresql/data/standby.signal
+    ```
+  </Step>
+</Steps>
+
+### Using Managed Services
+
+Cloud PostgreSQL services with built-in HA:
+
+<CardGroup cols={3}>
+  <Card title="AWS RDS" icon="aws">
+    Multi-AZ deployments with automatic failover
+    
+    ```bash .env
+    AP_POSTGRES_HOST=mydb.abc123.us-east-1.rds.amazonaws.com
+    AP_POSTGRES_USE_SSL=true
+    ```
+  </Card>
+  
+  <Card title="Google Cloud SQL" icon="google">
+    High availability with regional replication
+    
+    ```bash .env
+    AP_POSTGRES_HOST=10.0.0.3
+    AP_POSTGRES_USE_SSL=true
+    ```
+  </Card>
+  
+  <Card title="Azure Database" icon="microsoft">
+    Zone-redundant HA with read replicas
+    
+    ```bash .env
+    AP_POSTGRES_HOST=myserver.postgres.database.azure.com
+    AP_POSTGRES_USE_SSL=true
+    ```
+  </Card>
+</CardGroup>
+
+## SQLite (Development)
+
+For local development only:
+
+```bash .env
+AP_DB_TYPE=sqlite
+```
+
+<Warning>
+**SQLite limitations:**
+- Single concurrent writer
+- No network access
+- Limited scalability
+- File corruption risk
+
+Never use in production!
+</Warning>
+
+SQLite database location: `activepieces.db` in the working directory.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Connection refused">
+    Check PostgreSQL is running:
+    ```bash
+    sudo systemctl status postgresql
+    ```
+    
+    Verify port is open:
+    ```bash
+    sudo netstat -plnt | grep 5432
+    ```
+    
+    Test connection:
+    ```bash
+    psql -h localhost -U postgres -c "SELECT 1;"
+    ```
+  </Accordion>
+  
+  <Accordion title="Authentication failed">
+    Check `pg_hba.conf`:
+    ```bash
+    sudo cat /etc/postgresql/15/main/pg_hba.conf
+    ```
+    
+    Allow connections:
+    ```
+    # IPv4 local connections:
+    host    all             all             0.0.0.0/0            md5
+    ```
+    
+    Reload PostgreSQL:
+    ```bash
+    sudo systemctl reload postgresql
+    ```
+  </Accordion>
+  
+  <Accordion title="Too many connections">
+    Check active connections:
+    ```sql
+    SELECT count(*) FROM pg_stat_activity;
+    ```
+    
+    Increase max_connections:
+    ```ini postgresql.conf
+    max_connections = 200
+    ```
+    
+    Adjust pool size:
+    ```bash .env
+    AP_POSTGRES_POOL_SIZE=10
+    ```
+  </Accordion>
+  
+  <Accordion title="Disk space full">
+    Check database size:
+    ```sql
+    SELECT pg_size_pretty(pg_database_size('activepieces'));
+    ```
+    
+    Vacuum to reclaim space:
+    ```sql
+    VACUUM FULL;
+    ```
+    
+    Enable data retention:
+    ```bash .env
+    AP_EXECUTION_DATA_RETENTION_DAYS=30
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Storage" icon="hard-drive" href="/deployment/storage">
+    Configure file storage with S3
+  </Card>
+  <Card title="Scaling" icon="chart-line" href="/deployment/scaling">
+    Scale your database
+  </Card>
+  <Card title="Backup Strategy" icon="shield">
+    Implement backup automation
+  </Card>
+  <Card title="Monitoring" icon="chart-bar">
+    Setup database monitoring
+  </Card>
+</CardGroup>

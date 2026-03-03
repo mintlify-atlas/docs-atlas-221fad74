@@ -1,0 +1,503 @@
+---
+title: 'Pieces'
+description: 'Understanding Activepieces integrations and the pieces framework'
+---
+
+# Understanding Pieces
+
+Pieces are the building blocks of Activepieces - they're integrations that connect your workflows to external services and APIs. With over 280 pieces available, you can integrate with nearly any service, and if one doesn't exist, you can easily create your own using TypeScript.
+
+## What are Pieces?
+
+A **piece** is a packaged integration that provides:
+
+- **Actions**: Operations you can perform (send email, create record, etc.)
+- **Triggers**: Events that start flows (new email, form submission, etc.)
+- **Authentication**: Secure connection management
+- **Properties**: Configurable inputs for actions and triggers
+
+### Piece Structure
+
+Based on the Activepieces framework source code, here's how pieces are defined:
+
+```typescript
+import { createPiece, PieceAuth } from '@activepieces/pieces-framework';
+
+export const myPiece = createPiece({
+  displayName: 'My Service',
+  description: 'Integration with My Service',
+  auth: PieceAuth.OAuth2({
+    authUrl: 'https://api.myservice.com/oauth/authorize',
+    tokenUrl: 'https://api.myservice.com/oauth/token',
+    required: true,
+    scope: ['read', 'write']
+  }),
+  minimumSupportedRelease: '0.30.0',
+  logoUrl: 'https://cdn.activepieces.com/pieces/myservice.png',
+  authors: ['YourName'],
+  categories: [PieceCategory.PRODUCTIVITY],
+  actions: [
+    createRecordAction,
+    updateRecordAction,
+    deleteRecordAction
+  ],
+  triggers: [
+    newRecordTrigger,
+    updatedRecordTrigger
+  ],
+});
+```
+
+## Types of Pieces
+
+Activepieces organizes pieces into three categories:
+
+### Core Pieces
+
+Core pieces are essential integrations maintained by the Activepieces team. Located in `packages/pieces/core/`, there are **26 core pieces** including:
+
+- **HTTP**: Make requests to any API
+- **Code**: Write custom JavaScript/TypeScript
+- **Schedule**: Trigger flows on a schedule
+- **Webhook**: Receive HTTP requests
+- **Data Mapper**: Transform and manipulate data
+- **AI**: AI-powered text, image, and agent operations
+
+Core pieces are:
+- Always available
+- Battle-tested and reliable
+- Maintained with every Activepieces release
+- Include fundamental workflow operations
+
+### Community Pieces
+
+Community pieces are integrations contributed by the open source community. Located in `packages/pieces/community/`, there are **597+ community pieces** including:
+
+- Google Sheets, Gmail, Google Drive
+- Slack, Discord, Microsoft Teams
+- OpenAI, Anthropic, Replicate
+- Airtable, Notion, Asana
+- Stripe, PayPal, Shopify
+- And hundreds more!
+
+<Info>
+  Over **60% of Activepieces pieces** are contributed by the community, making it one of the most contributor-friendly automation platforms.
+</Info>
+
+Community pieces are:
+- Open source and published to npmjs.com
+- Independently versioned
+- Community-maintained
+- Constantly growing with new contributions
+
+### Custom Pieces
+
+Custom pieces are private integrations you build for your specific needs. Located in `packages/pieces/custom/`, these pieces:
+
+- Stay private to your instance
+- Can be proprietary integrations
+- Work with internal APIs
+- Follow the same framework as community pieces
+
+## Piece Components
+
+### Authentication
+
+Pieces support multiple authentication methods:
+
+#### OAuth2
+```typescript
+auth: PieceAuth.OAuth2({
+  authUrl: 'https://api.service.com/oauth/authorize',
+  tokenUrl: 'https://api.service.com/oauth/token',
+  required: true,
+  scope: ['read', 'write']
+})
+```
+
+#### API Key
+```typescript
+auth: PieceAuth.SecretText({
+  displayName: 'API Key',
+  description: 'Enter your API key from the service',
+  required: true,
+})
+```
+
+#### Basic Auth
+```typescript
+auth: PieceAuth.BasicAuth({
+  displayName: 'Credentials',
+  required: true,
+})
+```
+
+#### Custom Auth
+```typescript
+auth: PieceAuth.CustomAuth({
+  displayName: 'Connection',
+  required: true,
+  props: {
+    apiKey: Property.ShortText({
+      displayName: 'API Key',
+      required: true,
+    }),
+    baseUrl: Property.ShortText({
+      displayName: 'Base URL',
+      required: true,
+    }),
+  },
+})
+```
+
+#### No Auth
+```typescript
+auth: PieceAuth.None()
+```
+
+### Actions
+
+Actions are operations your piece can perform. Example from the Activepieces Platform piece:
+
+```typescript
+import { createAction, Property } from '@activepieces/pieces-framework';
+
+export const createProject = createAction({
+  name: 'create_project',
+  displayName: 'Create Project',
+  description: 'Creates a new project in Activepieces',
+  auth: activePieceAuth,
+  props: {
+    displayName: Property.ShortText({
+      displayName: 'Display Name',
+      required: true,
+    }),
+    externalId: Property.ShortText({
+      displayName: 'External ID',
+      required: true,
+    }),
+  },
+  async run(context) {
+    const { displayName, externalId } = context.propsValue;
+    const response = await httpClient.sendRequest({
+      method: HttpMethod.POST,
+      url: `${context.auth.baseApiUrl}/v1/projects`,
+      headers: {
+        Authorization: `Bearer ${context.auth.apiKey}`,
+      },
+      body: { displayName, externalId },
+    });
+    return response.body;
+  },
+});
+```
+
+### Triggers
+
+Triggers listen for events and start flows. They can be:
+
+#### Polling Triggers
+Check for new data on a schedule:
+
+```typescript
+import { createTrigger, TriggerStrategy } from '@activepieces/pieces-framework';
+
+export const newRecord = createTrigger({
+  name: 'new_record',
+  displayName: 'New Record',
+  description: 'Triggers when a new record is created',
+  type: TriggerStrategy.POLLING,
+  props: {
+    // Configuration properties
+  },
+  async onEnable(context) {
+    // Setup when trigger is enabled
+  },
+  async onDisable(context) {
+    // Cleanup when trigger is disabled
+  },
+  async run(context) {
+    const lastCheck = context.propsValue.lastCheck;
+    const newRecords = await fetchNewRecords(lastCheck);
+    return newRecords;
+  },
+});
+```
+
+#### Webhook Triggers
+Receive real-time events via webhooks:
+
+```typescript
+export const newWebhook = createTrigger({
+  name: 'new_webhook',
+  displayName: 'New Webhook Event',
+  type: TriggerStrategy.WEBHOOK,
+  async onEnable(context) {
+    // Register webhook with service
+    await registerWebhook({
+      url: context.webhookUrl,
+      events: ['record.created']
+    });
+  },
+  async onDisable(context) {
+    // Unregister webhook
+    await unregisterWebhook(context.webhookUrl);
+  },
+  async run(context) {
+    return [context.payload.body];
+  },
+});
+```
+
+### Properties
+
+Properties define inputs for actions and triggers:
+
+```typescript
+import { Property } from '@activepieces/pieces-framework';
+
+// Text input
+Property.ShortText({
+  displayName: 'Email',
+  required: true,
+})
+
+// Long text
+Property.LongText({
+  displayName: 'Description',
+  required: false,
+})
+
+// Dropdown
+Property.StaticDropdown({
+  displayName: 'Priority',
+  required: true,
+  options: {
+    options: [
+      { label: 'Low', value: 'low' },
+      { label: 'Medium', value: 'medium' },
+      { label: 'High', value: 'high' },
+    ]
+  }
+})
+
+// Dynamic dropdown (fetched from API)
+Property.Dropdown({
+  displayName: 'Channel',
+  required: true,
+  refreshers: [],
+  async options(context) {
+    const channels = await fetchChannels(context.auth);
+    return {
+      options: channels.map(ch => ({
+        label: ch.name,
+        value: ch.id
+      }))
+    };
+  },
+})
+
+// Number
+Property.Number({
+  displayName: 'Count',
+  required: true,
+})
+
+// Checkbox
+Property.Checkbox({
+  displayName: 'Send Notification',
+  required: false,
+})
+
+// Array
+Property.Array({
+  displayName: 'Items',
+  required: true,
+})
+
+// Object/JSON
+Property.Json({
+  displayName: 'Configuration',
+  required: false,
+})
+```
+
+## Piece Framework Features
+
+### Type Safety
+
+The pieces framework is built with TypeScript and provides full type safety:
+
+```typescript
+import { createPiece } from '@activepieces/pieces-framework';
+import { PieceAuth } from '@activepieces/pieces-framework';
+
+// TypeScript ensures correct structure
+const myPiece = createPiece({
+  displayName: 'My Piece',
+  auth: PieceAuth.None(),
+  actions: [], // Type-checked array of actions
+  triggers: [], // Type-checked array of triggers
+  // ... other required fields
+});
+```
+
+### NPM Package Distribution
+
+All pieces are published as npm packages:
+
+- **Naming**: `@activepieces/piece-{name}`
+- **Versioning**: Follows semantic versioning
+- **Distribution**: Published to npmjs.com
+- **Installation**: Install like any npm package
+
+```json
+{
+  "name": "@activepieces/piece-slack",
+  "version": "0.25.6",
+  "dependencies": {
+    "@activepieces/pieces-framework": "0.25.6",
+    "@slack/web-api": "^7.9.0"
+  }
+}
+```
+
+### Hot Reloading
+
+During local development, pieces support hot reloading:
+
+```bash
+# Start dev environment with hot reloading
+npm run dev
+
+# Edit a piece file
+# Changes are automatically reloaded
+```
+
+### Context API
+
+Pieces have access to a rich context object:
+
+```typescript
+interface ActionContext {
+  auth: AuthValue;           // Authentication credentials
+  propsValue: PropsValue;    // Action input values
+  store: Store;              // Persistent key-value store
+  server: ServerContext;     // API access
+  files: FilesService;       // File operations
+  connections: Connections;  // Access other connections
+}
+```
+
+## MCP Server Integration
+
+<Info>
+  Every Activepieces piece automatically becomes available as an MCP (Model Context Protocol) server!
+</Info>
+
+When you create a piece, it can be:
+1. Used in Activepieces flows
+2. Exposed as an MCP server tool
+3. Called by AI assistants like Claude Desktop, Cursor, and Windsurf
+
+Learn more in the [MCP Servers documentation](/concepts/mcp-servers).
+
+## Building Your Own Piece
+
+Creating a piece is straightforward:
+
+<Steps>
+  <Step title="Generate Piece Scaffold">
+    ```bash
+    npm run create-piece
+    ```
+    Follow the prompts to set up your piece structure.
+  </Step>
+  
+  <Step title="Define Authentication">
+    Choose the appropriate auth method for your service.
+  </Step>
+  
+  <Step title="Create Actions">
+    Add operations users can perform.
+  </Step>
+  
+  <Step title="Add Triggers">
+    Set up event listeners if needed.
+  </Step>
+  
+  <Step title="Test Locally">
+    Use hot reloading to test your piece in real workflows.
+  </Step>
+  
+  <Step title="Publish">
+    Publish to npm and optionally contribute back to the community.
+  </Step>
+</Steps>
+
+For detailed instructions, see the [Building Pieces guide](/pieces/introduction).
+
+## Piece Categories
+
+Pieces are organized into categories for easy discovery:
+
+- **Productivity**: Google Workspace, Microsoft 365, Notion
+- **Communication**: Slack, Discord, Email services
+- **Artificial Intelligence**: OpenAI, Anthropic, AI utilities
+- **Marketing**: Mailchimp, SendGrid, social media
+- **Developer Tools**: GitHub, GitLab, API testing
+- **E-commerce**: Shopify, WooCommerce, Stripe
+- **Business Intelligence**: Analytics, reporting tools
+- And many more...
+
+## Piece Versioning
+
+Each piece specifies its minimum supported Activepieces release:
+
+```typescript
+createPiece({
+  minimumSupportedRelease: '0.30.0',
+  maximumSupportedRelease: '0.50.0', // Optional
+  // ...
+})
+```
+
+This ensures:
+- Compatibility with platform features
+- Breaking changes are communicated
+- Users know which version to use
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Clear Naming" icon="tag">
+    Use descriptive names for actions and triggers that clearly indicate what they do.
+  </Card>
+  
+  <Card title="Good Descriptions" icon="text">
+    Write helpful descriptions for properties and include examples.
+  </Card>
+  
+  <Card title="Error Handling" icon="shield">
+    Handle errors gracefully and return helpful error messages.
+  </Card>
+  
+  <Card title="Validation" icon="check">
+    Validate inputs before making API calls to fail fast.
+  </Card>
+  
+  <Card title="Use Store" icon="database">
+    Leverage the store API for caching and state management.
+  </Card>
+  
+  <Card title="Test Thoroughly" icon="flask">
+    Test all actions and triggers with various inputs before publishing.
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+- [Build Your First Piece](/pieces/create-action) - Step-by-step guide
+- [Piece Development Guide](/pieces/introduction) - Complete reference
+- [MCP Integration](/concepts/mcp-servers) - Connect pieces to AI
+- [AI Pieces](/concepts/ai-agents) - Build AI-powered pieces

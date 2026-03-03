@@ -1,0 +1,776 @@
+---
+title: 'Audit Logs'
+description: 'Track user activity and maintain compliance with audit logging'
+icon: 'clipboard-list'
+---
+
+Audit logs provide a comprehensive record of all user actions and system events in Activepieces, essential for security monitoring, compliance, and troubleshooting.
+
+## Overview
+
+Audit logging captures:
+
+<CardGroup cols={3}>
+  <Card title="User Actions" icon="user">
+    Authentication, authorization, and user management events
+  </Card>
+  <Card title="Resource Changes" icon="pen">
+    Modifications to flows, connections, and configurations
+  </Card>
+  <Card title="System Events" icon="server">
+    Flow executions, errors, and system operations
+  </Card>
+</CardGroup>
+
+## Audit Event Types
+
+Activepieces tracks these event categories:
+
+### Authentication Events
+
+<Tabs>
+  <Tab title="Sign Up">
+    ```typescript
+    {
+      action: ApplicationEventName.USER_SIGNED_UP,
+      userId: "user_123",
+      userEmail: "alice@company.com",
+      ip: "203.0.113.42",
+      data: {
+        source: "sso" | "credentials" | "managed",
+        user: {
+          id: "user_123",
+          email: "alice@company.com",
+          firstName: "Alice",
+          lastName: "Smith"
+        }
+      }
+    }
+    ```
+    
+    **Captures:**
+    - New user registrations
+    - Authentication method (SSO, credentials, managed auth)
+    - User details and IP address
+  </Tab>
+  
+  <Tab title="Sign In">
+    ```typescript
+    {
+      action: ApplicationEventName.USER_SIGNED_IN,
+      userId: "user_123",
+      userEmail: "alice@company.com",
+      ip: "203.0.113.42",
+      data: {
+        user: {
+          id: "user_123",
+          email: "alice@company.com",
+          firstName: "Alice",
+          lastName: "Smith"
+        }
+      }
+    }
+    ```
+    
+    **Captures:**
+    - User logins
+    - Source IP address
+    - Timestamp of authentication
+  </Tab>
+  
+  <Tab title="Password Reset">
+    ```typescript
+    {
+      action: ApplicationEventName.USER_PASSWORD_RESET,
+      userId: "user_123",
+      userEmail: "alice@company.com",
+      ip: "203.0.113.42",
+      data: {
+        user: { ... }
+      }
+    }
+    ```
+    
+    **Captures:**
+    - Password reset requests
+    - User identity
+    - Request source
+  </Tab>
+  
+  <Tab title="Email Verified">
+    ```typescript
+    {
+      action: ApplicationEventName.USER_EMAIL_VERIFIED,
+      userId: "user_123",
+      userEmail: "alice@company.com",
+      data: {
+        user: { ... }
+      }
+    }
+    ```
+    
+    **Captures:**
+    - Email verification completion
+    - Verification timestamp
+  </Tab>
+</Tabs>
+
+### Flow Events
+
+<AccordionGroup>
+  <Accordion title="Flow Created">
+    ```typescript
+    {
+      action: ApplicationEventName.FLOW_CREATED,
+      projectId: "proj_abc123",
+      userId: "user_123",
+      data: {
+        flow: {
+          id: "flow_xyz789",
+          created: "2026-03-03T10:00:00.000Z",
+          updated: "2026-03-03T10:00:00.000Z"
+        },
+        project: {
+          displayName: "Marketing Team"
+        }
+      }
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Flow Updated">
+    ```typescript
+    {
+      action: ApplicationEventName.FLOW_UPDATED,
+      projectId: "proj_abc123",
+      userId: "user_123",
+      data: {
+        flowVersion: {
+          id: "version_123",
+          displayName: "Slack Notification",
+          flowId: "flow_xyz789",
+          created: "2026-03-03T10:00:00.000Z",
+          updated: "2026-03-03T10:15:00.000Z"
+        },
+        request: {
+          type: "ADD_ACTION" | "UPDATE_ACTION" | "DELETE_ACTION" |
+                "CHANGE_NAME" | "LOCK_AND_PUBLISH" | ...,
+          request: { /* operation details */ }
+        },
+        project: { displayName: "Marketing Team" }
+      }
+    }
+    ```
+    
+    **Tracked Operations:**
+    - ADD_ACTION, UPDATE_ACTION, DELETE_ACTION
+    - CHANGE_NAME, CHANGE_STATUS, CHANGE_FOLDER
+    - LOCK_AND_PUBLISH, USE_AS_DRAFT, LOCK_FLOW
+    - MOVE_ACTION, DUPLICATE_ACTION
+    - UPDATE_TRIGGER, UPDATE_METADATA
+    - And more...
+  </Accordion>
+  
+  <Accordion title="Flow Deleted">
+    ```typescript
+    {
+      action: ApplicationEventName.FLOW_DELETED,
+      projectId: "proj_abc123",
+      userId: "user_123",
+      data: {
+        flow: { id: "flow_xyz789", ... },
+        flowVersion: {
+          id: "version_123",
+          displayName: "Slack Notification",
+          flowId: "flow_xyz789"
+        },
+        project: { displayName: "Marketing Team" }
+      }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Flow Run Events
+
+<Tabs>
+  <Tab title="Run Started">
+    ```typescript
+    {
+      action: ApplicationEventName.FLOW_RUN_STARTED,
+      projectId: "proj_abc123",
+      data: {
+        flowRun: {
+          id: "run_abc123",
+          flowId: "flow_xyz789",
+          flowVersionId: "version_123",
+          flowDisplayName: "Slack Notification",
+          startTime: "2026-03-03T10:30:00.000Z",
+          environment: "PRODUCTION",
+          triggeredBy: {
+            type: "WEBHOOK" | "SCHEDULE" | "FLOW",
+            // ... trigger details
+          },
+          status: "RUNNING"
+        },
+        project: { displayName: "Marketing Team" }
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Run Finished">
+    ```typescript
+    {
+      action: ApplicationEventName.FLOW_RUN_FINISHED,
+      projectId: "proj_abc123",
+      data: {
+        flowRun: {
+          id: "run_abc123",
+          startTime: "2026-03-03T10:30:00.000Z",
+          finishTime: "2026-03-03T10:30:15.000Z",
+          duration: 15000,  // milliseconds
+          status: "SUCCEEDED" | "FAILED" | "STOPPED",
+          // ...
+        }
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Run Resumed">
+    ```typescript
+    {
+      action: ApplicationEventName.FLOW_RUN_RESUMED,
+      projectId: "proj_abc123",
+      userId: "user_123",
+      data: {
+        flowRun: {
+          id: "run_abc123",
+          status: "RUNNING"
+          // ...
+        }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Connection Events
+
+<Tabs>
+  <Tab title="Connection Created/Updated">
+    ```typescript
+    {
+      action: ApplicationEventName.CONNECTION_UPSERTED,
+      projectId: "proj_abc123",
+      userId: "user_123",
+      data: {
+        connection: {
+          id: "conn_123",
+          displayName: "Slack Workspace",
+          externalId: "T01234567",
+          pieceName: "@activepieces/piece-slack",
+          status: "ACTIVE",
+          type: "OAUTH2",
+          created: "2026-03-03T10:00:00.000Z",
+          updated: "2026-03-03T10:00:00.000Z"
+        },
+        project: { displayName: "Marketing Team" }
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Connection Deleted">
+    ```typescript
+    {
+      action: ApplicationEventName.CONNECTION_DELETED,
+      projectId: "proj_abc123",
+      userId: "user_123",
+      data: {
+        connection: {
+          id: "conn_123",
+          displayName: "Slack Workspace",
+          // ...
+        },
+        project: { displayName: "Marketing Team" }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Project Role Events
+
+```typescript
+{
+  action: ApplicationEventName.PROJECT_ROLE_CREATED |
+          ApplicationEventName.PROJECT_ROLE_UPDATED |
+          ApplicationEventName.PROJECT_ROLE_DELETED,
+  platformId: "platform_123",
+  userId: "user_123",
+  data: {
+    projectRole: {
+      id: "role_123",
+      name: "Integration Specialist",
+      permissions: [
+        "READ_FLOW",
+        "WRITE_FLOW",
+        "READ_APP_CONNECTION"
+      ],
+      platformId: "platform_123",
+      created: "2026-03-03T10:00:00.000Z",
+      updated: "2026-03-03T10:00:00.000Z"
+    }
+  }
+}
+```
+
+### Folder Events
+
+```typescript
+{
+  action: ApplicationEventName.FOLDER_CREATED |
+          ApplicationEventName.FOLDER_UPDATED |
+          ApplicationEventName.FOLDER_DELETED,
+  projectId: "proj_abc123",
+  userId: "user_123",
+  data: {
+    folder: {
+      id: "folder_123",
+      displayName: "Production Flows",
+      created: "2026-03-03T10:00:00.000Z",
+      updated: "2026-03-03T10:00:00.000Z"
+    },
+    project: { displayName: "Marketing Team" }
+  }
+}
+```
+
+## Querying Audit Logs
+
+### List Events
+
+<CodeGroup>
+```bash Basic Query
+curl -X GET 'https://api.activepieces.com/v1/audit-events?limit=50' \
+  -H 'Authorization: Bearer {token}'
+```
+
+```bash Filter by Action
+curl -X GET 'https://api.activepieces.com/v1/audit-events?action=flow.created,flow.deleted' \
+  -H 'Authorization: Bearer {token}'
+```
+
+```bash Filter by User
+curl -X GET 'https://api.activepieces.com/v1/audit-events?userId=user_123' \
+  -H 'Authorization: Bearer {token}'
+```
+
+```bash Filter by Project
+curl -X GET 'https://api.activepieces.com/v1/audit-events?projectId=proj_abc123' \
+  -H 'Authorization: Bearer {token}'
+```
+
+```bash Date Range
+curl -X GET 'https://api.activepieces.com/v1/audit-events?
+  createdAfter=2026-03-01T00:00:00.000Z&
+  createdBefore=2026-03-31T23:59:59.999Z' \
+  -H 'Authorization: Bearer {token}'
+```
+</CodeGroup>
+
+### Filter Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `limit` | number | Max results per page (default: 50) |
+| `cursor` | string | Pagination cursor |
+| `action` | string[] | Filter by event types |
+| `projectId` | string[] | Filter by projects |
+| `userId` | string | Filter by user |
+| `createdAfter` | ISO date | Events after timestamp |
+| `createdBefore` | ISO date | Events before timestamp |
+
+### Response Format
+
+```typescript
+{
+  data: [
+    {
+      id: "audit_abc123",
+      platformId: "platform_123",
+      projectId: "proj_abc123",
+      projectDisplayName: "Marketing Team",
+      userId: "user_123",
+      userEmail: "alice@company.com",
+      action: "flow.created",
+      ip: "203.0.113.42",
+      created: "2026-03-03T10:00:00.000Z",
+      data: { /* event-specific data */ }
+    }
+  ],
+  next: "cursor_xyz",
+  previous: null
+}
+```
+
+## Audit Log Storage
+
+### Database Schema
+
+```sql
+CREATE TABLE audit_event (
+  id VARCHAR PRIMARY KEY,
+  platform_id VARCHAR NOT NULL,
+  project_id VARCHAR,
+  user_id VARCHAR,
+  user_email VARCHAR,
+  project_display_name VARCHAR,
+  action VARCHAR NOT NULL,
+  ip VARCHAR,
+  data JSONB NOT NULL,
+  created TIMESTAMP NOT NULL,
+  updated TIMESTAMP NOT NULL
+);
+
+CREATE INDEX ON audit_event (platform_id, project_id, user_id, action);
+CREATE INDEX ON audit_event (platform_id, user_id, action);
+CREATE INDEX ON audit_event (platform_id, action);
+```
+
+### Retention
+
+Configure log retention:
+
+```bash
+# Environment variable
+AP_AUDIT_LOG_RETENTION_DAYS=90
+```
+
+<Info>
+Default retention is 90 days. Adjust based on compliance requirements (e.g., SOC 2 requires 1 year).
+</Info>
+
+### Archival
+
+Archive old logs to cold storage:
+
+```sql
+-- Archive logs older than 1 year
+COPY (
+  SELECT * FROM audit_event
+  WHERE created < NOW() - INTERVAL '1 year'
+) TO '/archive/audit_events_2025.csv' CSV HEADER;
+
+-- Delete archived logs
+DELETE FROM audit_event
+WHERE created < NOW() - INTERVAL '1 year';
+```
+
+## Compliance Use Cases
+
+<Tabs>
+  <Tab title="SOC 2">
+    ### SOC 2 Type II Requirements
+    
+    **Access Monitoring:**
+    ```sql
+    -- Track privileged access
+    SELECT user_email, action, created
+    FROM audit_event
+    WHERE action IN (
+      'project.role.created',
+      'project.role.updated',
+      'user.signed.in'
+    )
+    ORDER BY created DESC;
+    ```
+    
+    **Change Management:**
+    ```sql
+    -- Track production flow changes
+    SELECT user_email, data->>'flowVersion'->>'displayName', created
+    FROM audit_event
+    WHERE action = 'flow.updated'
+      AND project_id = 'prod_project'
+    ORDER BY created DESC;
+    ```
+    
+    **Required Retention:** 12 months minimum
+  </Tab>
+  
+  <Tab title="GDPR">
+    ### GDPR Compliance
+    
+    **Data Access Logs:**
+    ```sql
+    -- Track access to user data
+    SELECT user_email, action, ip, created
+    FROM audit_event
+    WHERE project_id = 'user_data_project'
+      AND created > NOW() - INTERVAL '30 days'
+    ORDER BY created DESC;
+    ```
+    
+    **Right to Deletion:**
+    ```sql
+    -- Find all events for a user (for deletion)
+    SELECT * FROM audit_event
+    WHERE user_email = 'user@example.com';
+    ```
+    
+    **Required Retention:** 6 years for audit purposes
+  </Tab>
+  
+  <Tab title="HIPAA">
+    ### HIPAA Audit Controls
+    
+    **PHI Access Logs:**
+    ```sql
+    -- Track all access to PHI flows
+    SELECT user_email, action, ip, created
+    FROM audit_event
+    WHERE project_id IN (
+      SELECT id FROM project WHERE metadata->>'contains_phi' = 'true'
+    )
+    ORDER BY created DESC;
+    ```
+    
+    **Failed Access Attempts:**
+    ```sql
+    -- Monitor unauthorized access attempts
+    SELECT user_email, ip, COUNT(*) as attempts
+    FROM audit_event
+    WHERE action LIKE 'user.%'
+      AND data->>'success' = 'false'
+      AND created > NOW() - INTERVAL '24 hours'
+    GROUP BY user_email, ip
+    HAVING COUNT(*) > 3;
+    ```
+    
+    **Required Retention:** 6 years minimum
+  </Tab>
+</Tabs>
+
+## Security Monitoring
+
+### Suspicious Activity Detection
+
+<AccordionGroup>
+  <Accordion title="Unusual Login Patterns">
+    ```sql
+    -- Multiple failed logins
+    SELECT user_email, ip, COUNT(*) as failed_attempts
+    FROM audit_event
+    WHERE action = 'user.signed.in'
+      AND data->>'success' = 'false'
+      AND created > NOW() - INTERVAL '1 hour'
+    GROUP BY user_email, ip
+    HAVING COUNT(*) >= 5;
+    ```
+  </Accordion>
+  
+  <Accordion title="Privilege Escalation">
+    ```sql
+    -- Track role changes
+    SELECT 
+      user_email,
+      data->'projectRole'->>'name' as new_role,
+      created
+    FROM audit_event
+    WHERE action = 'project.role.updated'
+      AND data->'projectRole'->'permissions' ? 'WRITE_PROJECT_MEMBER'
+    ORDER BY created DESC;
+    ```
+  </Accordion>
+  
+  <Accordion title="Mass Deletion">
+    ```sql
+    -- Detect bulk deletions
+    SELECT user_email, COUNT(*) as deletions
+    FROM audit_event
+    WHERE action IN ('flow.deleted', 'connection.deleted')
+      AND created > NOW() - INTERVAL '10 minutes'
+    GROUP BY user_email
+    HAVING COUNT(*) > 10;
+    ```
+  </Accordion>
+  
+  <Accordion title="After-Hours Access">
+    ```sql
+    -- Access outside business hours
+    SELECT user_email, action, created
+    FROM audit_event
+    WHERE EXTRACT(HOUR FROM created) NOT BETWEEN 8 AND 18
+       OR EXTRACT(DOW FROM created) IN (0, 6)  -- Weekend
+    ORDER BY created DESC;
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Alerting
+
+Set up alerts for critical events:
+
+```typescript
+// Example alert logic
+if (event.action === 'project.role.updated') {
+  const newPermissions = event.data.projectRole.permissions
+  if (newPermissions.includes('WRITE_PROJECT_MEMBER')) {
+    await sendAlert({
+      severity: 'HIGH',
+      message: `Admin role granted to user ${event.userEmail}`,
+      event
+    })
+  }
+}
+```
+
+## Export & Integration
+
+### Export to CSV
+
+```sql
+COPY (
+  SELECT 
+    created,
+    user_email,
+    action,
+    project_display_name,
+    ip
+  FROM audit_event
+  WHERE created > NOW() - INTERVAL '30 days'
+  ORDER BY created DESC
+) TO '/exports/audit_log.csv' CSV HEADER;
+```
+
+### Stream to SIEM
+
+Integrate with security information and event management systems:
+
+<CodeGroup>
+```typescript Splunk
+import { HEC } from '@splunk/splunk-logging'
+
+const logger = new HEC({
+  token: 'your-hec-token',
+  url: 'https://splunk.company.com:8088'
+})
+
+// Send audit events
+await logger.send({
+  message: auditEvent,
+  severity: 'info',
+  source: 'activepieces',
+  sourcetype: 'audit:log'
+})
+```
+
+```typescript Datadog
+import { datadogLogs } from '@datadog/browser-logs'
+
+// Send to Datadog
+datadogLogs.logger.info('Audit event', {
+  event: auditEvent,
+  service: 'activepieces',
+  source: 'audit-log'
+})
+```
+
+```typescript ELK Stack
+import { Client } from '@elastic/elasticsearch'
+
+const client = new Client({
+  node: 'https://elasticsearch:9200'
+})
+
+// Index audit event
+await client.index({
+  index: 'activepieces-audit',
+  body: auditEvent
+})
+```
+</CodeGroup>
+
+## Event Summary
+
+Generate human-readable summaries:
+
+```typescript
+import { summarizeApplicationEvent } from '@activepieces/shared'
+
+const summary = summarizeApplicationEvent(auditEvent)
+// Returns: "Flow run run_abc123 is started"
+//       or "Updated action "Send Message" in "Slack Notification" Flow."
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Regular Reviews" icon="calendar">
+    Review audit logs weekly for unusual patterns or security incidents.
+  </Card>
+  
+  <Card title="Compliance Checks" icon="check">
+    Perform quarterly compliance audits using audit log queries.
+  </Card>
+  
+  <Card title="Retention Policy" icon="clock">
+    Set retention based on strictest compliance requirement (usually 1-7 years).
+  </Card>
+  
+  <Card title="Access Control" icon="lock">
+    Restrict audit log access to security and compliance teams.
+  </Card>
+  
+  <Card title="Automated Alerts" icon="bell">
+    Configure real-time alerts for critical security events.
+  </Card>
+  
+  <Card title="Archive Strategy" icon="archive">
+    Archive old logs to cost-effective storage (S3, Glacier, etc.).
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Missing Events">
+    **Check:**
+    - Audit logging is enabled
+    - Database has sufficient storage
+    - No errors in application logs
+    - Events not filtered by retention policy
+  </Accordion>
+  
+  <Accordion title="Performance Issues">
+    **Solutions:**
+    - Add database indexes on frequently queried fields
+    - Implement log archival for old events
+    - Use pagination for large result sets
+    - Consider read replicas for audit queries
+  </Accordion>
+  
+  <Accordion title="Incomplete Data">
+    **Check:**
+    - User identity mapping is working
+    - Project information is available
+    - IP extraction configured correctly (reverse proxy)
+  </Accordion>
+</AccordionGroup>
+
+## Related Topics
+
+<CardGroup cols={3}>
+  <Card title="Users & Permissions" icon="shield" href="/admin/users-permissions">
+    Track permission changes
+  </Card>
+  <Card title="Security Practices" icon="lock" href="/admin/security-practices">
+    Security monitoring
+  </Card>
+  <Card title="SSO Configuration" icon="fingerprint" href="/admin/sso">
+    Track SSO logins
+  </Card>
+</CardGroup>

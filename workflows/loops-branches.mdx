@@ -1,0 +1,726 @@
+---
+title: Loops and Branches
+description: Add control flow to your workflows with loops and conditional branches
+icon: 'code-branch'
+---
+
+Control flow lets you create dynamic workflows that can iterate over data and make decisions based on conditions. Activepieces provides two powerful control flow actions: Loops and Routers.
+
+## Loop Over Items
+
+The Loop action iterates over an array and executes actions for each item. This is perfect for processing lists, bulk operations, and batch processing.
+
+### Basic Loop Structure
+
+```typescript
+// From packages/shared/src/lib/automation/flows/actions/action.ts
+{
+  "name": "loop",
+  "type": "LOOP_ON_ITEMS",
+  "displayName": "Loop Over Items",
+  "settings": {
+    "items": "{{ trigger.items }}"  // Array to iterate over
+  },
+  "firstLoopAction": {
+    // Actions to execute for each item
+  }
+}
+```
+
+<Steps>
+  <Step title="Add a Loop Action">
+    Click the **+** button and select **Loop Over Items**.
+  </Step>
+
+  <Step title="Configure Items Array">
+    Set the items to loop over. This can be:
+
+    - Data from a previous step: `{{ get_data.body.results }}`
+    - A literal array: `{{ [1, 2, 3, 4, 5] }}`
+    - An expression: `{{ trigger.users.filter(u => u.active) }}`
+  </Step>
+
+  <Step title="Add Actions Inside Loop">
+    Click inside the loop to add actions that will execute for each item.
+  </Step>
+</Steps>
+
+### Loop Variables
+
+Inside a loop, you have access to special variables:
+
+<CodeGroup>
+```typescript loop.item
+// Current item being processed
+{{ loop.item }}
+
+// Access item properties
+{{ loop.item.name }}
+{{ loop.item.email }}
+{{ loop.item.id }}
+```
+
+```typescript loop.index
+// Current iteration number (1-based)
+{{ loop.index }}
+
+// Use in messages
+"Processing item {{ loop.index }} of {{ loop.iterations.length }}"
+```
+
+```typescript loop.iterations
+// Array of all completed iterations with their outputs
+{{ loop.iterations }}
+
+// Access previous iteration results
+{{ loop.iterations[0].send_email.output }}
+```
+</CodeGroup>
+
+### Loop Examples
+
+<Tabs>
+  <Tab title="Send Bulk Emails">
+    Loop over a list of users and send each one an email:
+
+    ```typescript
+    {
+      "name": "email_loop",
+      "type": "LOOP_ON_ITEMS",
+      "settings": {
+        "items": "{{ get_users.body.users }}"
+      },
+      "firstLoopAction": {
+        "name": "send_email",
+        "type": "PIECE",
+        "settings": {
+          "pieceName": "@activepieces/piece-gmail",
+          "actionName": "send_email",
+          "input": {
+            "to": "{{ loop.item.email }}",
+            "subject": "Hello {{ loop.item.name }}!",
+            "body": "You are user #{{ loop.index }}"
+          }
+        }
+      }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Process Orders">
+    Loop over orders and update inventory:
+
+    ```typescript
+    {
+      "name": "process_orders",
+      "type": "LOOP_ON_ITEMS",
+      "settings": {
+        "items": "{{ fetch_orders.body.orders }}"
+      },
+      "firstLoopAction": {
+        "name": "update_inventory",
+        "type": "PIECE",
+        "settings": {
+          "pieceName": "@activepieces/piece-http",
+          "actionName": "send_request",
+          "input": {
+            "method": "POST",
+            "url": "https://api.example.com/inventory/{{ loop.item.productId }}",
+            "body": {
+              "quantity": "{{ loop.item.quantity }}",
+              "orderId": "{{ loop.item.id }}"
+            }
+          }
+        }
+      }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Transform Data">
+    Process and transform each item:
+
+    ```typescript
+    {
+      "name": "transform_loop",
+      "type": "LOOP_ON_ITEMS",
+      "settings": {
+        "items": "{{ trigger.data }}"
+      },
+      "firstLoopAction": {
+        "name": "transform_item",
+        "type": "CODE",
+        "settings": {
+          "sourceCode": {
+            "code": `
+              export const code = async (inputs) => {
+                return {
+                  id: inputs.item.id,
+                  fullName: inputs.item.firstName + ' ' + inputs.item.lastName,
+                  email: inputs.item.email.toLowerCase(),
+                  processed: new Date().toISOString()
+                };
+              };
+            `
+          },
+          "input": {
+            "item": "{{ loop.item }}"
+          }
+        }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Loop Output
+
+When a loop completes, it produces an output with all iterations:
+
+```typescript
+// From packages/server/engine/test/handler/flow-looping.test.ts
+{
+  "output": {
+    "iterations": [
+      {
+        "index": 1,
+        "item": 4,
+        "send_email": { "output": { /* step output */ } }
+      },
+      {
+        "index": 2,
+        "item": 5,
+        "send_email": { "output": { /* step output */ } }
+      },
+      {
+        "index": 3,
+        "item": 6,
+        "send_email": { "output": { /* step output */ } }
+      }
+    ],
+    "index": 3,      // Total iterations
+    "item": 6        // Last item
+  }
+}
+```
+
+<Note>
+You can access loop results in subsequent steps using `{{ loop_name.output.iterations }}`
+</Note>
+
+## Conditional Branches (Router)
+
+The Router action lets you create conditional branches in your workflow, executing different actions based on conditions.
+
+### Router Structure
+
+```typescript
+// From packages/shared/src/lib/automation/flows/actions/action.ts
+{
+  "name": "router",
+  "type": "ROUTER",
+  "displayName": "Branch",
+  "settings": {
+    "executionType": "EXECUTE_FIRST_MATCH",  // or "EXECUTE_ALL_MATCH"
+    "conditions": [[
+      {
+        "firstValue": "{{ trigger.status }}",
+        "operator": "TEXT_EXACTLY_MATCHES",
+        "secondValue": "completed",
+        "caseSensitive": false
+      }
+    ]]
+  },
+  "children": [
+    // Branch 1: When condition is true
+    { /* actions */ },
+    // Branch 2: Fallback (when condition is false)
+    { /* actions */ }
+  ]
+}
+```
+
+<Steps>
+  <Step title="Add Router Action">
+    Click the **+** button and select **Router** (or **Branch**).
+  </Step>
+
+  <Step title="Configure Conditions">
+    Set up conditions that determine which branch to execute.
+  </Step>
+
+  <Step title="Add Branch Actions">
+    Add actions to each branch path.
+  </Step>
+</Steps>
+
+### Branch Operators
+
+Activepieces supports many condition operators:
+
+<CardGroup cols={2}>
+  <Card title="Text Operators" icon="text">
+    - Contains
+    - Does not contain
+    - Exactly matches
+    - Starts with
+    - Ends with
+  </Card>
+
+  <Card title="Number Operators" icon="hashtag">
+    - Equal to
+    - Greater than
+    - Less than
+  </Card>
+
+  <Card title="Boolean Operators" icon="toggle-on">
+    - Is true
+    - Is false
+  </Card>
+
+  <Card title="Existence Operators" icon="circle-question">
+    - Exists
+    - Does not exist
+  </Card>
+</CardGroup>
+
+### Branch Operators Reference
+
+```typescript
+// From packages/shared/src/lib/automation/flows/actions/action.ts
+export enum BranchOperator {
+  TEXT_CONTAINS = 'TEXT_CONTAINS',
+  TEXT_DOES_NOT_CONTAIN = 'TEXT_DOES_NOT_CONTAIN',
+  TEXT_EXACTLY_MATCHES = 'TEXT_EXACTLY_MATCHES',
+  TEXT_DOES_NOT_EXACTLY_MATCH = 'TEXT_DOES_NOT_EXACTLY_MATCH',
+  TEXT_STARTS_WITH = 'TEXT_START_WITH',
+  TEXT_DOES_NOT_START_WITH = 'TEXT_DOES_NOT_START_WITH',
+  TEXT_ENDS_WITH = 'TEXT_ENDS_WITH',
+  TEXT_DOES_NOT_END_WITH = 'TEXT_DOES_NOT_END_WITH',
+  NUMBER_IS_GREATER_THAN = 'NUMBER_IS_GREATER_THAN',
+  NUMBER_IS_LESS_THAN = 'NUMBER_IS_LESS_THAN',
+  NUMBER_IS_EQUAL_TO = 'NUMBER_IS_EQUAL_TO',
+  BOOLEAN_IS_TRUE = 'BOOLEAN_IS_TRUE',
+  BOOLEAN_IS_FALSE = 'BOOLEAN_IS_FALSE',
+  EXISTS = 'EXISTS',
+  DOES_NOT_EXIST = 'DOES_NOT_EXIST',
+  // ... and more
+}
+```
+
+### Execution Types
+
+<Tabs>
+  <Tab title="Execute First Match">
+    Execute only the first branch whose condition is true:
+
+    ```typescript
+    {
+      "executionType": "EXECUTE_FIRST_MATCH"
+    }
+    ```
+
+    Use this when you want **if-else** behavior.
+  </Tab>
+
+  <Tab title="Execute All Match">
+    Execute all branches whose conditions are true:
+
+    ```typescript
+    {
+      "executionType": "EXECUTE_ALL_MATCH"
+    }
+    ```
+
+    Use this when multiple branches can run simultaneously.
+  </Tab>
+</Tabs>
+
+### Branch Examples
+
+<Tabs>
+  <Tab title="Status-Based Routing">
+    Route based on order status:
+
+    ```typescript
+    // From packages/server/engine/test/handler/flow-branching.test.ts
+    {
+      "name": "router",
+      "type": "ROUTER",
+      "settings": {
+        "executionType": "EXECUTE_FIRST_MATCH",
+        "conditions": [[
+          {
+            "firstValue": "{{ trigger.order.status }}",
+            "operator": "TEXT_EXACTLY_MATCHES",
+            "secondValue": "completed",
+            "caseSensitive": false
+          }
+        ]]
+      },
+      "children": [
+        // Branch 1: Completed orders
+        {
+          "name": "send_confirmation",
+          "type": "PIECE",
+          "settings": {
+            "pieceName": "@activepieces/piece-gmail",
+            "actionName": "send_email",
+            "input": {
+              "to": "{{ trigger.order.customerEmail }}",
+              "subject": "Order Completed"
+            }
+          }
+        },
+        // Branch 2: Fallback for other statuses
+        {
+          "name": "send_status_update",
+          "type": "PIECE",
+          "settings": {
+            "pieceName": "@activepieces/piece-gmail",
+            "actionName": "send_email",
+            "input": {
+              "to": "admin@example.com",
+              "subject": "Order Status: {{ trigger.order.status }}"
+            }
+          }
+        }
+      ]
+    }
+    ```
+  </Tab>
+
+  <Tab title="Number-Based Routing">
+    Route based on numeric values:
+
+    ```typescript
+    {
+      "name": "priority_router",
+      "type": "ROUTER",
+      "settings": {
+        "executionType": "EXECUTE_FIRST_MATCH",
+        "conditions": [[
+          {
+            "firstValue": "{{ trigger.score }}",
+            "operator": "NUMBER_IS_GREATER_THAN",
+            "secondValue": "80"
+          }
+        ]]
+      },
+      "children": [
+        // High priority (score > 80)
+        {
+          "name": "high_priority_action",
+          "settings": { /* ... */ }
+        },
+        // Normal priority
+        {
+          "name": "normal_priority_action",
+          "settings": { /* ... */ }
+        }
+      ]
+    }
+    ```
+  </Tab>
+
+  <Tab title="Multiple Conditions">
+    Combine multiple conditions with AND logic:
+
+    ```typescript
+    {
+      "settings": {
+        "conditions": [[
+          {
+            "firstValue": "{{ trigger.user.role }}",
+            "operator": "TEXT_EXACTLY_MATCHES",
+            "secondValue": "admin"
+          },
+          {
+            "firstValue": "{{ trigger.user.verified }}",
+            "operator": "BOOLEAN_IS_TRUE"
+          }
+        ]]
+      }
+    }
+    // Both conditions must be true
+    ```
+  </Tab>
+
+  <Tab title="Existence Check">
+    Check if a value exists:
+
+    ```typescript
+    {
+      "conditions": [[
+        {
+          "firstValue": "{{ trigger.user.email }}",
+          "operator": "EXISTS"
+        }
+      ]]
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Router Output
+
+```typescript
+// From packages/server/engine/test/handler/flow-branching.test.ts
+{
+  "router": {
+    "output": {
+      "branches": [
+        {
+          "branchIndex": 1,
+          "branchName": "High Priority",
+          "evaluation": true  // This branch was executed
+        }
+      ]
+    }
+  }
+}
+```
+
+## Combining Loops and Branches
+
+You can nest loops inside branches and vice versa:
+
+### Loop with Conditional Logic
+
+```typescript
+{
+  "name": "process_users",
+  "type": "LOOP_ON_ITEMS",
+  "settings": {
+    "items": "{{ get_users.body.users }}"
+  },
+  "firstLoopAction": {
+    "name": "check_status",
+    "type": "ROUTER",
+    "settings": {
+      "executionType": "EXECUTE_FIRST_MATCH",
+      "conditions": [[
+        {
+          "firstValue": "{{ loop.item.active }}",
+          "operator": "BOOLEAN_IS_TRUE"
+        }
+      ]]
+    },
+    "children": [
+      // Active users: send welcome
+      {
+        "name": "send_welcome",
+        "type": "PIECE",
+        "settings": { /* ... */ }
+      },
+      // Inactive users: send reactivation
+      {
+        "name": "send_reactivation",
+        "type": "PIECE",
+        "settings": { /* ... */ }
+      }
+    ]
+  }
+}
+```
+
+### Branch with Loops
+
+```typescript
+{
+  "name": "order_router",
+  "type": "ROUTER",
+  "settings": {
+    "conditions": [[
+      {
+        "firstValue": "{{ trigger.orderType }}",
+        "operator": "TEXT_EXACTLY_MATCHES",
+        "secondValue": "bulk"
+      }
+    ]]
+  },
+  "children": [
+    // Bulk orders: loop through items
+    {
+      "name": "bulk_loop",
+      "type": "LOOP_ON_ITEMS",
+      "settings": {
+        "items": "{{ trigger.items }}"
+      },
+      "firstLoopAction": { /* process each item */ }
+    },
+    // Single orders: process directly
+    {
+      "name": "process_single",
+      "type": "PIECE",
+      "settings": { /* ... */ }
+    }
+  ]
+}
+```
+
+## Skipping Control Flow
+
+You can skip loops and routers conditionally:
+
+```typescript
+// From packages/server/engine/test/handler/flow-looping.test.ts
+{
+  "name": "conditional_loop",
+  "type": "LOOP_ON_ITEMS",
+  "skip": "{{ trigger.skipProcessing }}",  // Dynamic skip
+  "settings": {
+    "items": "{{ trigger.items }}"
+  }
+}
+```
+
+<Warning>
+When a loop or router is skipped, it produces no output and subsequent steps cannot reference its results.
+</Warning>
+
+## Error Handling in Control Flow
+
+### Loop Error Handling
+
+```typescript
+// From packages/server/engine/test/handler/flow-looping.test.ts
+// If a step fails inside a loop:
+{
+  "output": {
+    "iterations": [
+      {
+        "index": 1,
+        "item": 4,
+        "process_item": {
+          "status": "FAILED",
+          "errorMessage": "Custom Runtime Error"
+        }
+      }
+    ],
+    "index": 1,  // Stopped at first iteration
+    "item": 4
+  }
+}
+```
+
+By default, loops stop on the first error. Use error handling options to continue:
+
+```typescript
+{
+  "firstLoopAction": {
+    "name": "risky_step",
+    "settings": {
+      "errorHandlingOptions": {
+        "continueOnFailure": {
+          "value": true  // Continue loop even if this step fails
+        }
+      }
+    }
+  }
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Limit Loop Iterations">
+    Be mindful of loop size. Processing 1000+ items can take time and consume resources.
+
+    ```typescript
+    // Filter before looping
+    {{ trigger.items.filter(item => item.needsProcessing).slice(0, 100) }}
+    ```
+  </Accordion>
+
+  <Accordion title="Use Meaningful Branch Names">
+    Name your router actions to describe the decision being made:
+
+    ```typescript
+    "displayName": "Route by Priority Level"  // Good
+    "displayName": "Branch"                   // Bad
+    ```
+  </Accordion>
+
+  <Accordion title="Test Edge Cases">
+    Test your control flow with:
+    - Empty arrays for loops
+    - Null/undefined values in conditions
+    - Both branches of routers
+  </Accordion>
+
+  <Accordion title="Keep Branches Simple">
+    If branches become complex, consider splitting into separate flows and using subflows.
+  </Accordion>
+
+  <Accordion title="Document Complex Logic">
+    Use notes to explain why certain branches or loops exist.
+  </Accordion>
+</AccordionGroup>
+
+## Common Patterns
+
+### Filter-Then-Loop
+
+```typescript
+// Code action to filter
+{
+  "name": "filter_data",
+  "type": "CODE",
+  "settings": {
+    "sourceCode": {
+      "code": "export const code = async (inputs) => inputs.items.filter(i => i.active);"
+    },
+    "input": {
+      "items": "{{ trigger.items }}"
+    }
+  }
+}
+
+// Then loop over filtered results
+{
+  "name": "process_filtered",
+  "type": "LOOP_ON_ITEMS",
+  "settings": {
+    "items": "{{ filter_data.output }}"
+  }
+}
+```
+
+### Priority-Based Routing
+
+```typescript
+// Multiple conditions checked in order
+{
+  "name": "priority_router",
+  "type": "ROUTER",
+  "settings": {
+    "executionType": "EXECUTE_FIRST_MATCH"
+  },
+  "children": [
+    // Check high priority first
+    { /* condition: score > 90 */ },
+    // Then medium priority
+    { /* condition: score > 70 */ },
+    // Fallback: low priority
+    { /* no condition - always matches */ }
+  ]
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Error Handling" icon="shield" href="/workflows/error-handling">
+    Handle errors in loops and branches
+  </Card>
+  <Card title="Passing Data" icon="arrow-right-arrow-left" href="/workflows/passing-data">
+    Learn more about data flow
+  </Card>
+  <Card title="Debugging" icon="bug" href="/workflows/debugging">
+    Debug control flow issues
+  </Card>
+  <Card title="Best Practices" icon="star" href="/workflows/publishing">
+    Optimize your workflows
+  </Card>
+</CardGroup>

@@ -1,0 +1,666 @@
+---
+title: File Storage
+description: Configure local and S3 file storage for Activepieces
+---
+
+Activepieces stores files uploaded by users and generated during workflow execution. You can use local storage or S3-compatible object storage.
+
+## Storage Options
+
+<CardGroup cols={2}>
+  <Card title="Local Storage" icon="hard-drive">
+    **Default option**
+    
+    Files stored on container filesystem:
+    - Simple setup
+    - No external dependencies
+    - Requires persistent volumes
+    - Limited scalability
+    
+    **Use for**: Development, single-server deployments
+  </Card>
+  
+  <Card title="S3 Storage" icon="cloud">
+    **Recommended for production**
+    
+    Files stored in S3-compatible object storage:
+    - Unlimited scalability
+    - High availability
+    - Geographic distribution
+    - Managed backups
+    
+    **Use for**: Production, multi-server deployments
+  </Card>
+</CardGroup>
+
+## Local Storage
+
+### Configuration
+
+Local storage is the default. Files are stored in `/usr/src/app/cache`:
+
+```bash .env
+# Use local storage (default)
+AP_FILE_STORAGE_LOCATION=local
+```
+
+### Docker Volume
+
+Mount a volume to persist files:
+
+```yaml docker-compose.yml
+services:
+  activepieces:
+    image: ghcr.io/activepieces/activepieces:0.79.0
+    volumes:
+      - ./cache:/usr/src/app/cache
+```
+
+Or use a named volume:
+
+```yaml docker-compose.yml
+services:
+  activepieces:
+    volumes:
+      - activepieces_cache:/usr/src/app/cache
+
+volumes:
+  activepieces_cache:
+```
+
+### Kubernetes Persistent Volume
+
+```yaml values.yaml
+persistence:
+  enabled: true
+  size: 10Gi
+  storageClass: "standard"
+  mountPath: "/usr/src/app/cache"
+```
+
+### Limitations
+
+<Warning>
+**Local storage limitations:**
+- Files lost if container is deleted (without volume)
+- Cannot share files across multiple instances
+- Limited by disk space
+- No built-in redundancy
+
+For production with multiple replicas, use S3 storage.
+</Warning>
+
+## S3 Storage
+
+### Supported Services
+
+Activepieces works with any S3-compatible service:
+
+<Tabs>
+  <Tab title="AWS S3">
+    Amazon Simple Storage Service
+    
+    ```bash .env
+    AP_FILE_STORAGE_LOCATION=s3
+    AP_S3_BUCKET=activepieces-files
+    AP_S3_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
+    AP_S3_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+    AP_S3_REGION=us-east-1
+    ```
+  </Tab>
+  
+  <Tab title="MinIO">
+    Self-hosted S3-compatible storage
+    
+    ```bash .env
+    AP_FILE_STORAGE_LOCATION=s3
+    AP_S3_BUCKET=activepieces
+    AP_S3_ACCESS_KEY_ID=minioadmin
+    AP_S3_SECRET_ACCESS_KEY=minioadmin
+    AP_S3_REGION=us-east-1
+    AP_S3_ENDPOINT=http://minio:9000
+    ```
+  </Tab>
+  
+  <Tab title="Cloudflare R2">
+    Cloudflare's S3-compatible storage
+    
+    ```bash .env
+    AP_FILE_STORAGE_LOCATION=s3
+    AP_S3_BUCKET=activepieces-bucket
+    AP_S3_ACCESS_KEY_ID=your_access_key_id
+    AP_S3_SECRET_ACCESS_KEY=your_secret_access_key
+    AP_S3_REGION=auto
+    AP_S3_ENDPOINT=https://<account_id>.r2.cloudflarestorage.com
+    ```
+  </Tab>
+  
+  <Tab title="DigitalOcean Spaces">
+    DigitalOcean's object storage
+    
+    ```bash .env
+    AP_FILE_STORAGE_LOCATION=s3
+    AP_S3_BUCKET=activepieces-space
+    AP_S3_ACCESS_KEY_ID=your_spaces_key
+    AP_S3_SECRET_ACCESS_KEY=your_spaces_secret
+    AP_S3_REGION=nyc3
+    AP_S3_ENDPOINT=https://nyc3.digitaloceanspaces.com
+    ```
+  </Tab>
+</Tabs>
+
+### Configuration
+
+<ParamField path="AP_FILE_STORAGE_LOCATION" type="enum" required>
+  Storage backend
+  
+  **Options**: `local`, `s3`
+</ParamField>
+
+<ParamField path="AP_S3_BUCKET" type="string" required>
+  S3 bucket name
+  
+  Create bucket before deploying Activepieces.
+</ParamField>
+
+<ParamField path="AP_S3_ACCESS_KEY_ID" type="string" required>
+  AWS access key ID or equivalent
+  
+  <Info>
+  Not required if using `AP_S3_USE_IRSA=true` on EKS.
+  </Info>
+</ParamField>
+
+<ParamField path="AP_S3_SECRET_ACCESS_KEY" type="string" required>
+  AWS secret access key or equivalent
+</ParamField>
+
+<ParamField path="AP_S3_REGION" type="string" required>
+  S3 region
+  
+  **Examples**: `us-east-1`, `eu-west-1`, `auto` (for Cloudflare R2)
+</ParamField>
+
+<ParamField path="AP_S3_ENDPOINT" type="string">
+  Custom endpoint for S3-compatible services
+  
+  **Leave empty for AWS S3**
+</ParamField>
+
+<ParamField path="AP_S3_USE_SIGNED_URLS" type="boolean" default="false">
+  Generate pre-signed URLs for file downloads
+  
+  Enable for private buckets:
+  ```bash
+  AP_S3_USE_SIGNED_URLS=true
+  ```
+</ParamField>
+
+<ParamField path="AP_S3_USE_IRSA" type="boolean" default="false">
+  Use IAM Roles for Service Accounts (EKS)
+  
+  ```bash
+  AP_S3_USE_IRSA=true
+  ```
+  
+  <Info>
+  When enabled, no access key/secret required. Authentication uses pod IAM role.
+  </Info>
+</ParamField>
+
+## S3 Setup Guide
+
+### AWS S3
+
+<Steps>
+  <Step title="Create S3 bucket">
+    ```bash
+    aws s3 mb s3://activepieces-files --region us-east-1
+    ```
+    
+    Or via AWS Console:
+    1. Go to S3 service
+    2. Click "Create bucket"
+    3. Enter bucket name: `activepieces-files`
+    4. Select region: `us-east-1`
+    5. Keep default settings
+    6. Click "Create bucket"
+  </Step>
+  
+  <Step title="Configure bucket policy">
+    For public access (not recommended):
+    
+    ```json
+    {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Effect": "Allow",
+          "Principal": "*",
+          "Action": "s3:GetObject",
+          "Resource": "arn:aws:s3:::activepieces-files/*"
+        }
+      ]
+    }
+    ```
+    
+    For private access (recommended), use signed URLs:
+    ```bash
+    AP_S3_USE_SIGNED_URLS=true
+    ```
+  </Step>
+  
+  <Step title="Create IAM user">
+    Create IAM user with S3 access:
+    
+    ```json IAM Policy
+    {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Effect": "Allow",
+          "Action": [
+            "s3:PutObject",
+            "s3:GetObject",
+            "s3:DeleteObject",
+            "s3:ListBucket"
+          ],
+          "Resource": [
+            "arn:aws:s3:::activepieces-files",
+            "arn:aws:s3:::activepieces-files/*"
+          ]
+        }
+      ]
+    }
+    ```
+    
+    Generate access keys and add to `.env`.
+  </Step>
+  
+  <Step title="Configure Activepieces">
+    ```bash .env
+    AP_FILE_STORAGE_LOCATION=s3
+    AP_S3_BUCKET=activepieces-files
+    AP_S3_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
+    AP_S3_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+    AP_S3_REGION=us-east-1
+    AP_S3_USE_SIGNED_URLS=true
+    ```
+  </Step>
+</Steps>
+
+### MinIO (Self-Hosted)
+
+<Steps>
+  <Step title="Deploy MinIO">
+    ```yaml docker-compose.yml
+    services:
+      minio:
+        image: minio/minio:latest
+        command: server /data --console-address ":9001"
+        ports:
+          - '9000:9000'
+          - '9001:9001'
+        environment:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+        volumes:
+          - minio_data:/data
+    
+    volumes:
+      minio_data:
+    ```
+    
+    Start MinIO:
+    ```bash
+    docker compose up -d minio
+    ```
+  </Step>
+  
+  <Step title="Create bucket">
+    Access MinIO Console at http://localhost:9001
+    
+    Login with:
+    - Username: `minioadmin`
+    - Password: `minioadmin`
+    
+    Create bucket named `activepieces`
+  </Step>
+  
+  <Step title="Configure Activepieces">
+    ```bash .env
+    AP_FILE_STORAGE_LOCATION=s3
+    AP_S3_BUCKET=activepieces
+    AP_S3_ACCESS_KEY_ID=minioadmin
+    AP_S3_SECRET_ACCESS_KEY=minioadmin
+    AP_S3_REGION=us-east-1
+    AP_S3_ENDPOINT=http://minio:9000
+    ```
+  </Step>
+</Steps>
+
+### EKS with IRSA
+
+Use IAM Roles for Service Accounts (no credentials needed):
+
+<Steps>
+  <Step title="Create IAM policy">
+    ```json
+    {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Effect": "Allow",
+          "Action": [
+            "s3:PutObject",
+            "s3:GetObject",
+            "s3:DeleteObject",
+            "s3:ListBucket"
+          ],
+          "Resource": [
+            "arn:aws:s3:::activepieces-files",
+            "arn:aws:s3:::activepieces-files/*"
+          ]
+        }
+      ]
+    }
+    ```
+  </Step>
+  
+  <Step title="Create IAM role">
+    ```bash
+    eksctl create iamserviceaccount \
+      --name activepieces \
+      --namespace default \
+      --cluster my-cluster \
+      --attach-policy-arn arn:aws:iam::ACCOUNT_ID:policy/ActivepiecesS3Policy \
+      --approve
+    ```
+  </Step>
+  
+  <Step title="Configure Helm">
+    ```yaml values.yaml
+    serviceAccount:
+      create: true
+      annotations:
+        eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/activepieces-role
+    
+    s3:
+      enabled: true
+      bucket: activepieces-files
+      region: us-east-1
+      useIrsa: true
+      useSignedUrls: true
+    ```
+  </Step>
+</Steps>
+
+## File Structure
+
+Files are organized by platform and project:
+
+```
+/usr/src/app/cache/ (local)
+or
+s3://bucket-name/ (S3)
+  ├── platform/
+  │   ├── {platform_id}/
+  │   │   ├── FILE/
+  │   │   │   └── {file_id}
+  │   │   └── PACKAGE_ARCHIVE/
+  │   │       └── {archive_id}
+  ├── project/
+      ├── {project_id}/
+      │   ├── FILE/
+      │   │   └── {file_id}
+      │   ├── FLOW_RUN_LOG/
+      │   │   └── {run_id}.log
+      │   └── STEP_FILE/
+      │       └── {step_file_id}
+```
+
+File types (from `s3-helper.ts:13`):
+- `FILE`: User-uploaded files
+- `FLOW_RUN_LOG`: Execution logs
+- `STEP_FILE`: Step output files
+- `PACKAGE_ARCHIVE`: Piece package archives
+
+## File Operations
+
+Activepieces uses the AWS SDK for S3 operations (source: `s3-helper.ts`):
+
+### Upload
+
+```typescript
+const s3Key = await s3Helper.uploadFile(key, buffer)
+```
+
+Uploads file to S3 using `PutObjectCommand`.
+
+### Download
+
+```typescript
+const buffer = await s3Helper.getFile(s3Key)
+```
+
+Downloads file from S3 using `GetObjectCommand`.
+
+### Signed URLs
+
+```typescript
+const url = await s3Helper.getS3SignedUrl(s3Key, fileName)
+```
+
+Generates pre-signed URL valid for 7 days.
+
+### Delete
+
+```typescript
+await s3Helper.deleteFiles([key1, key2, key3])
+```
+
+Batch delete up to 100 files (Cloudflare R2 limit).
+
+## Monitoring
+
+### Storage Usage
+
+<Tabs>
+  <Tab title="Local Storage">
+    Check disk usage:
+    
+    ```bash
+    # Docker container
+    docker exec activepieces du -sh /usr/src/app/cache
+    
+    # Host system
+    du -sh ./cache
+    ```
+  </Tab>
+  
+  <Tab title="S3 Storage">
+    AWS CLI:
+    ```bash
+    aws s3 ls s3://activepieces-files --recursive --human-readable --summarize
+    ```
+    
+    Or check AWS Console → S3 → Metrics
+  </Tab>
+</Tabs>
+
+### Cleanup
+
+Configure lifecycle policies to automatically delete old files:
+
+<Tabs>
+  <Tab title="S3 Lifecycle">
+    ```json
+    {
+      "Rules": [
+        {
+          "Id": "DeleteOldLogs",
+          "Status": "Enabled",
+          "Prefix": "project/",
+          "Filter": {
+            "Prefix": "FLOW_RUN_LOG/"
+          },
+          "Expiration": {
+            "Days": 30
+          }
+        }
+      ]
+    }
+    ```
+    
+    Apply policy:
+    ```bash
+    aws s3api put-bucket-lifecycle-configuration \
+      --bucket activepieces-files \
+      --lifecycle-configuration file://lifecycle.json
+    ```
+  </Tab>
+  
+  <Tab title="MinIO Lifecycle">
+    ```bash
+    mc ilm add --expiry-days 30 myminio/activepieces/FLOW_RUN_LOG
+    ```
+  </Tab>
+</Tabs>
+
+## Migration
+
+### Local to S3
+
+<Steps>
+  <Step title="Setup S3 bucket">
+    Create and configure S3 bucket as described above.
+  </Step>
+  
+  <Step title="Sync existing files">
+    ```bash
+    # Copy files from container to S3
+    docker cp activepieces:/usr/src/app/cache ./temp-cache
+    aws s3 sync ./temp-cache s3://activepieces-files/
+    rm -rf ./temp-cache
+    ```
+  </Step>
+  
+  <Step title="Update configuration">
+    ```bash .env
+    AP_FILE_STORAGE_LOCATION=s3
+    AP_S3_BUCKET=activepieces-files
+    # ... S3 credentials ...
+    ```
+  </Step>
+  
+  <Step title="Restart Activepieces">
+    ```bash
+    docker compose restart activepieces
+    ```
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="S3 connection errors">
+    Test S3 configuration:
+    
+    ```bash
+    # AWS CLI
+    aws s3 ls s3://activepieces-files --region us-east-1
+    
+    # Using environment variables
+    AWS_ACCESS_KEY_ID=xxx AWS_SECRET_ACCESS_KEY=yyy aws s3 ls s3://bucket
+    ```
+    
+    Check logs:
+    ```bash
+    docker compose logs activepieces | grep -i s3
+    ```
+  </Accordion>
+  
+  <Accordion title="Access denied errors">
+    Verify IAM permissions include:
+    - `s3:PutObject`
+    - `s3:GetObject`
+    - `s3:DeleteObject`
+    - `s3:ListBucket`
+    
+    Check bucket policy allows your IAM user/role.
+  </Accordion>
+  
+  <Accordion title="Signed URLs not working">
+    Enable signed URLs:
+    ```bash
+    AP_S3_USE_SIGNED_URLS=true
+    ```
+    
+    Verify bucket is private (not public).
+    
+    Check URL expiration (7 days default).
+  </Accordion>
+  
+  <Accordion title="Files not persisting (local)">
+    Ensure volume is mounted:
+    
+    ```bash
+    docker inspect activepieces | grep -A 10 Mounts
+    ```
+    
+    Recreate with volume:
+    ```bash
+    docker run -v ./cache:/usr/src/app/cache ...
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use S3 for Production" icon="cloud">
+    Always use S3-compatible storage for production deployments with:
+    - Multiple replicas
+    - High availability requirements
+    - Large file volumes
+  </Card>
+  
+  <Card title="Enable Versioning" icon="clock-rotate-left">
+    Enable S3 bucket versioning to protect against accidental deletion:
+    
+    ```bash
+    aws s3api put-bucket-versioning \
+      --bucket activepieces-files \
+      --versioning-configuration Status=Enabled
+    ```
+  </Card>
+  
+  <Card title="Use Signed URLs" icon="lock">
+    Keep buckets private and use pre-signed URLs:
+    
+    ```bash
+    AP_S3_USE_SIGNED_URLS=true
+    ```
+  </Card>
+  
+  <Card title="Configure Lifecycle" icon="trash">
+    Automatically delete old logs and temporary files to reduce costs.
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Environment Variables" icon="gear" href="/deployment/environment-variables">
+    Complete S3 configuration reference
+  </Card>
+  <Card title="Database" icon="database" href="/deployment/database">
+    Configure PostgreSQL
+  </Card>
+  <Card title="Scaling" icon="chart-line" href="/deployment/scaling">
+    Scale file storage
+  </Card>
+  <Card title="Backup" icon="shield">
+    Backup S3 files
+  </Card>
+</CardGroup>

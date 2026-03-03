@@ -1,0 +1,689 @@
+---
+title: Testing Pieces
+description: Learn how to test your pieces locally and write unit tests
+---
+
+## Testing Overview
+
+Testing pieces ensures they work correctly before contributing them to the community. Activepieces provides multiple ways to test:
+
+<CardGroup cols={3}>
+  <Card title="Local Testing" icon="laptop">
+    Test in development environment
+  </Card>
+  <Card title="Unit Tests" icon="flask">
+    Automated test suites
+  </Card>
+  <Card title="Integration Tests" icon="network-wired">
+    End-to-end testing
+  </Card>
+</CardGroup>
+
+## Local Testing with Hot Reload
+
+The fastest way to test during development is using hot reload.
+
+<Steps>
+  <Step title="Start Development Server">
+    ```bash
+    npm run dev
+    ```
+    
+    This starts:
+    - Frontend on `http://localhost:4200`
+    - Backend on `http://localhost:3000`
+    - Engine for flow execution
+  </Step>
+
+  <Step title="Open Activepieces">
+    Navigate to `http://localhost:4200` in your browser
+  </Step>
+
+  <Step title="Create a Test Flow">
+    1. Click "Create Flow"
+    2. Add your piece as a trigger or action
+    3. Configure the properties
+    4. Click "Test" to execute
+  </Step>
+
+  <Step title="Make Changes">
+    Edit your piece code - changes are reflected immediately without restart!
+    
+    ```typescript
+    // Edit action in src/lib/actions/my-action.ts
+    export const myAction = createAction({
+      // Your changes here
+    });
+    ```
+    
+    Save and test again - no rebuild needed.
+  </Step>
+</Steps>
+
+<Tip>
+  Hot reloading is enabled by default in development mode. Changes to actions, triggers, properties, and authentication are all hot-reloaded.
+</Tip>
+
+## Testing Actions
+
+### Manual Testing
+
+Test actions directly in the flow builder:
+
+```typescript
+export const sendEmail = createAction({
+  name: 'send_email',
+  displayName: 'Send Email',
+  props: {
+    to: Property.ShortText({
+      displayName: 'To',
+      required: true,
+    }),
+    subject: Property.ShortText({
+      displayName: 'Subject',
+      required: true,
+    }),
+    body: Property.LongText({
+      displayName: 'Body',
+      required: true,
+    }),
+  },
+  
+  async run(context) {
+    // Your implementation
+    const result = await sendEmailApi({
+      to: context.propsValue.to,
+      subject: context.propsValue.subject,
+      body: context.propsValue.body,
+    });
+    
+    return result;
+  },
+  
+  // Optional: Custom test function
+  async test(context) {
+    // Use test data or a test endpoint
+    return await sendEmailApi({
+      to: 'test@example.com',
+      subject: 'Test Email',
+      body: 'This is a test',
+    });
+  },
+});
+```
+
+### Test Function
+
+Provide a `test` function that uses safe test data:
+
+```typescript
+export const createIssue = createAction({
+  name: 'create_issue',
+  displayName: 'Create Issue',
+  props: {
+    repository: Property.ShortText({
+      displayName: 'Repository',
+      required: true,
+    }),
+    title: Property.ShortText({
+      displayName: 'Title',
+      required: true,
+    }),
+  },
+  
+  async run(context) {
+    return await createGitHubIssue({
+      repo: context.propsValue.repository,
+      title: context.propsValue.title,
+      labels: ['created-by-activepieces'],
+    });
+  },
+  
+  // Test with a test repository
+  async test(context) {
+    return await createGitHubIssue({
+      repo: 'activepieces/test-repo',
+      title: '[TEST] ' + context.propsValue.title,
+      labels: ['test', 'automated'],
+    });
+  },
+});
+```
+
+## Testing Triggers
+
+### Polling Triggers
+
+Polling triggers can be tested by clicking the "Test" button:
+
+```typescript
+export const newItems = createTrigger({
+  name: 'new_items',
+  displayName: 'New Items',
+  type: TriggerStrategy.POLLING,
+  
+  sampleData: {
+    id: '123',
+    title: 'Sample Item',
+    created_at: '2024-01-15T10:00:00Z',
+  },
+  
+  async onEnable(context) {
+    // Initialize state
+    await context.store.put('lastId', null);
+  },
+  
+  async onDisable(context) {
+    // Cleanup
+    await context.store.delete('lastId');
+  },
+  
+  async run(context) {
+    const lastId = await context.store.get<string>('lastId');
+    const items = await fetchNewItems(lastId);
+    
+    if (items.length > 0) {
+      await context.store.put('lastId', items[0].id);
+    }
+    
+    return items;
+  },
+  
+  // Optional: Custom test that returns sample data
+  async test(context) {
+    return [
+      {
+        id: '1',
+        title: 'Test Item 1',
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: '2',
+        title: 'Test Item 2',
+        created_at: new Date().toISOString(),
+      },
+    ];
+  },
+});
+```
+
+### Webhook Triggers
+
+Test webhook triggers by:
+
+1. **Enable the trigger** in a flow
+2. **Trigger the actual event** in the external service
+3. **Verify webhook was called** and flow executed
+
+```typescript
+export const newIssue = createTrigger({
+  name: 'new_issue',
+  displayName: 'New Issue',
+  type: TriggerStrategy.WEBHOOK,
+  
+  sampleData: {
+    action: 'opened',
+    issue: {
+      id: 1,
+      title: 'Sample Issue',
+    },
+  },
+  
+  async onEnable(context) {
+    // Register webhook
+    console.log('Webhook URL:', context.webhookUrl);
+    console.log('Webhook Secret:', context.webhookSecret);
+    
+    const webhook = await registerWebhook({
+      url: context.webhookUrl,
+      secret: context.webhookSecret,
+      events: ['issues'],
+    });
+    
+    await context.store.put('webhookId', webhook.id);
+  },
+  
+  async onDisable(context) {
+    const webhookId = await context.store.get('webhookId');
+    if (webhookId) {
+      await deleteWebhook(webhookId);
+    }
+  },
+  
+  async run(context) {
+    const payload = context.payload.body;
+    
+    if (payload.action !== 'opened') {
+      return [];
+    }
+    
+    return [payload];
+  },
+});
+```
+
+<Note>
+  For webhook testing, you'll need to use a tool like ngrok or deploy to a public URL to receive webhooks during development.
+</Note>
+
+## Unit Tests
+
+Write automated tests using Vitest:
+
+### Test File Structure
+
+```
+packages/pieces/community/my-piece/
+├── src/
+│   ├── index.ts
+│   └── lib/
+│       ├── actions/
+│       │   ├── send-message.ts
+│       │   └── send-message.test.ts  ← Test file
+│       └── triggers/
+│           ├── new-message.ts
+│           └── new-message.test.ts
+└── package.json
+```
+
+### Example: Action Test
+
+```typescript send-message.test.ts
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { sendMessage } from './send-message';
+import { createMockContext } from '@activepieces/pieces-framework';
+
+describe('Send Message Action', () => {
+  let mockContext;
+  
+  beforeEach(() => {
+    // Create mock context
+    mockContext = createMockContext({
+      auth: {
+        access_token: 'test-token',
+      },
+      propsValue: {
+        channel: 'C1234567890',
+        text: 'Hello, World!',
+      },
+    });
+    
+    // Mock fetch
+    global.fetch = vi.fn();
+  });
+  
+  it('should send message successfully', async () => {
+    // Mock successful API response
+    (global.fetch as any).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ok: true,
+        ts: '1234567890.123456',
+        message: {
+          text: 'Hello, World!',
+        },
+      }),
+    });
+    
+    const result = await sendMessage.run(mockContext);
+    
+    expect(result.ok).toBe(true);
+    expect(result.ts).toBe('1234567890.123456');
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://slack.com/api/chat.postMessage',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'Authorization': 'Bearer test-token',
+        }),
+      })
+    );
+  });
+  
+  it('should handle API errors', async () => {
+    // Mock API error
+    (global.fetch as any).mockResolvedValue({
+      ok: false,
+      json: async () => ({
+        ok: false,
+        error: 'channel_not_found',
+      }),
+    });
+    
+    await expect(sendMessage.run(mockContext)).rejects.toThrow(
+      'channel_not_found'
+    );
+  });
+  
+  it('should validate required fields', async () => {
+    mockContext.propsValue.text = '';
+    
+    await expect(sendMessage.run(mockContext)).rejects.toThrow(
+      'Message text is required'
+    );
+  });
+});
+```
+
+### Example: Trigger Test
+
+```typescript new-message.test.ts
+import { describe, it, expect, beforeEach } from 'vitest';
+import { newMessageTrigger } from './new-message';
+import { createMockContext } from '@activepieces/pieces-framework';
+
+describe('New Message Trigger', () => {
+  let mockContext;
+  
+  beforeEach(() => {
+    mockContext = createMockContext({
+      auth: {
+        access_token: 'test-token',
+        data: {
+          team_id: 'T1234567890',
+        },
+      },
+      propsValue: {
+        ignoreBots: false,
+      },
+      store: new Map(),
+    });
+  });
+  
+  it('should process channel messages', async () => {
+    mockContext.payload = {
+      body: {
+        event: {
+          type: 'message',
+          channel_type: 'channel',
+          text: 'Hello!',
+          user: 'U1234567890',
+        },
+      },
+    };
+    
+    const result = await newMessageTrigger.run(mockContext);
+    
+    expect(result).toHaveLength(1);
+    expect(result[0].text).toBe('Hello!');
+  });
+  
+  it('should ignore bot messages when configured', async () => {
+    mockContext.propsValue.ignoreBots = true;
+    mockContext.payload = {
+      body: {
+        event: {
+          type: 'message',
+          channel_type: 'channel',
+          text: 'Bot message',
+          bot_id: 'B1234567890',
+        },
+      },
+    };
+    
+    const result = await newMessageTrigger.run(mockContext);
+    
+    expect(result).toHaveLength(0);
+  });
+  
+  it('should ignore DM messages', async () => {
+    mockContext.payload = {
+      body: {
+        event: {
+          type: 'message',
+          channel_type: 'im',
+          text: 'DM message',
+        },
+      },
+    };
+    
+    const result = await newMessageTrigger.run(mockContext);
+    
+    expect(result).toHaveLength(0);
+  });
+});
+```
+
+### Running Tests
+
+<CodeGroup>
+```bash Run All Tests
+npm run test
+```
+
+```bash Run Tests for Specific Piece
+cd packages/pieces/community/my-piece
+npm run test
+```
+
+```bash Run Tests in Watch Mode
+npm run test -- --watch
+```
+
+```bash Run Tests with Coverage
+npm run test -- --coverage
+```
+</CodeGroup>
+
+## Integration Tests
+
+End-to-end tests that run actual flows:
+
+```typescript e2e/my-piece.spec.ts
+import { test, expect } from '@playwright/test';
+
+test('create and execute flow with my piece', async ({ page }) => {
+  // Navigate to Activepieces
+  await page.goto('http://localhost:4200');
+  
+  // Create new flow
+  await page.click('text=Create Flow');
+  await page.fill('[placeholder="Flow Name"]', 'Test Flow');
+  
+  // Add trigger
+  await page.click('text=Add Trigger');
+  await page.fill('[placeholder="Search"]', 'My Piece');
+  await page.click('text=New Event');
+  
+  // Configure trigger
+  await page.fill('[name="webhookUrl"]', 'https://example.com/webhook');
+  await page.click('text=Save');
+  
+  // Add action
+  await page.click('text=Add Step');
+  await page.fill('[placeholder="Search"]', 'My Piece');
+  await page.click('text=Send Message');
+  
+  // Configure action
+  await page.fill('[name="channel"]', 'general');
+  await page.fill('[name="message"]', 'Test message');
+  
+  // Test action
+  await page.click('text=Test');
+  
+  // Verify output
+  await expect(page.locator('text=Success')).toBeVisible();
+});
+```
+
+Run integration tests:
+
+```bash
+npm run test:e2e
+```
+
+## Testing Best Practices
+
+<AccordionGroup>
+  <Accordion title="Test Error Cases">
+    Don't just test the happy path:
+    
+    ```typescript
+    it('should handle network errors', async () => {
+      global.fetch = vi.fn().mockRejectedValue(
+        new Error('Network error')
+      );
+      
+      await expect(action.run(context)).rejects.toThrow(
+        'Network error'
+      );
+    });
+    
+    it('should handle invalid credentials', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+      });
+      
+      await expect(action.run(context)).rejects.toThrow(
+        'Authentication failed'
+      );
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="Mock External APIs">
+    Never make real API calls in tests:
+    
+    ```typescript
+    beforeEach(() => {
+      // Mock all HTTP requests
+      global.fetch = vi.fn();
+    });
+    
+    afterEach(() => {
+      // Restore original fetch
+      vi.restoreAllMocks();
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="Use Sample Data">
+    Provide realistic sample data for testing:
+    
+    ```typescript
+    const sampleIssue = {
+      id: 1,
+      number: 42,
+      title: 'Test Issue',
+      body: 'Description',
+      user: {
+        login: 'testuser',
+        id: 12345,
+      },
+      labels: [
+        { name: 'bug' },
+        { name: 'priority-high' },
+      ],
+      created_at: '2024-01-15T10:00:00Z',
+    };
+    ```
+  </Accordion>
+
+  <Accordion title="Test State Management">
+    For triggers, test state storage:
+    
+    ```typescript
+    it('should track last processed item', async () => {
+      const store = new Map();
+      const context = createMockContext({ store });
+      
+      await trigger.run(context);
+      
+      expect(store.get('lastId')).toBe('item-123');
+    });
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Debugging
+
+### Console Logging
+
+Use console.log during development:
+
+```typescript
+async run(context) {
+  console.log('Auth:', context.auth);
+  console.log('Props:', context.propsValue);
+  
+  const result = await makeApiCall();
+  console.log('Result:', result);
+  
+  return result;
+}
+```
+
+### VS Code Debugger
+
+Set breakpoints and debug:
+
+1. Add launch configuration:
+
+```json .vscode/launch.json
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Piece",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "skipFiles": ["<node_internals>/**"],
+      "console": "integratedTerminal"
+    }
+  ]
+}
+```
+
+2. Set breakpoints in your code
+3. Press F5 to start debugging
+
+### Network Debugging
+
+Inspect HTTP requests:
+
+```typescript
+import { httpClient, HttpMethod } from '@activepieces/pieces-common';
+
+const response = await httpClient.sendRequest({
+  method: HttpMethod.POST,
+  url: apiUrl,
+  headers: headers,
+  body: body,
+  // Enable request/response logging
+  verbose: true,
+});
+
+console.log('Status:', response.status);
+console.log('Headers:', response.headers);
+console.log('Body:', response.body);
+```
+
+## Testing Checklist
+
+Before contributing your piece:
+
+- [ ] All actions work correctly with valid inputs
+- [ ] Error messages are clear and helpful
+- [ ] Authentication works and validates properly
+- [ ] Dropdowns load options correctly
+- [ ] Dynamic properties refresh as expected
+- [ ] Triggers receive and process events
+- [ ] Webhook registration/cleanup works
+- [ ] Unit tests pass
+- [ ] No console errors or warnings
+- [ ] Sample data is realistic
+- [ ] Documentation is complete
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Contribute Your Piece" href="/pieces/contribute" icon="code-pull-request">
+    Submit your piece to the community
+  </Card>
+  <Card title="Versioning" href="/pieces/versioning" icon="tag">
+    Learn about piece versioning
+  </Card>
+</CardGroup>

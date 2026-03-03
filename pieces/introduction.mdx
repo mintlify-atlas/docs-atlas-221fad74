@@ -1,0 +1,137 @@
+---
+title: Introduction to Pieces
+description: Learn about Activepieces' TypeScript framework for building integrations
+---
+
+## What are Pieces?
+
+Pieces are integrations in Activepieces - modular, reusable components that connect your automation flows to external services and APIs. Each piece can contain **actions** (things you can do) and **triggers** (events that start flows).
+
+Activepieces has 280+ open-source pieces, with 60% contributed by the community. All pieces are:
+- Written in TypeScript
+- Published to npmjs.com
+- Versioned independently
+- Available as MCP servers for use with LLMs
+
+## Piece Framework Overview
+
+The piece framework (`@activepieces/pieces-framework`) provides a type-safe, developer-friendly way to build integrations.
+
+### Core Concepts
+
+<AccordionGroup>
+  <Accordion title="Actions">
+    Actions are operations that can be performed in a flow. They take inputs, execute logic, and return outputs.
+    
+    Examples:
+    - Send a message to Slack
+    - Create an issue in GitHub
+    - Update a record in Airtable
+  </Accordion>
+
+  <Accordion title="Triggers">
+    Triggers start flows when specific events occur. They can be:
+    - **Polling**: Check for changes periodically
+    - **Webhook**: Receive real-time notifications
+    - **App Webhook**: Use platform-level webhooks
+    
+    Examples:
+    - New email received
+    - File uploaded to cloud storage
+    - Form submission
+  </Accordion>
+
+  <Accordion title="Authentication">
+    Pieces support multiple authentication methods:
+    - OAuth2
+    - API Keys (Secret Text)
+    - Custom Authentication (multiple fields)
+    - Basic Auth
+  </Accordion>
+
+  <Accordion title="Properties">
+    Properties define the inputs for actions and triggers:
+    - ShortText, LongText
+    - Number, Checkbox
+    - Dropdown (static or dynamic)
+    - File, JSON, DateTime
+    - Dynamic properties that change based on other inputs
+  </Accordion>
+</AccordionGroup>
+
+### Framework Structure
+
+The framework is located at `packages/pieces/framework/` in the repository:
+
+```
+packages/pieces/framework/
+├── src/
+│   ├── lib/
+│   │   ├── action/          # Action definitions
+│   │   ├── trigger/         # Trigger definitions
+│   │   ├── property/        # Property types
+│   │   │   ├── authentication/  # Auth types
+│   │   │   └── input/          # Input property types
+│   │   ├── piece.ts         # Piece creation
+│   │   └── context.ts       # Execution context
+│   └── index.ts
+└── package.json
+```
+
+## Example: Simple Piece
+
+Here's what a minimal piece looks like:
+
+```typescript
+import { createPiece, PieceAuth } from '@activepieces/pieces-framework';
+import { PieceCategory } from '@activepieces/shared';
+
+export const myPiece = createPiece({
+  displayName: 'My Service',
+  description: 'Integration with My Service',
+  auth: PieceAuth.SecretText({
+    displayName: 'API Key',
+    required: true,
+  }),
+  minimumSupportedRelease: '0.30.0',
+  logoUrl: 'https://cdn.activepieces.com/pieces/my-service.png',
+  categories: [PieceCategory.PRODUCTIVITY],
+  authors: ['your-github-username'],
+  actions: [],
+  triggers: [],
+});
+```
+
+## Why Build Pieces?
+
+<CardGroup cols={2}>
+  <Card title="Extend Activepieces" icon="plug">
+    Add integrations for services you use that aren't available yet
+  </Card>
+  <Card title="Type Safety" icon="shield-check">
+    Full TypeScript support with autocomplete and type checking
+  </Card>
+  <Card title="Hot Reloading" icon="bolt">
+    Test changes instantly during local development
+  </Card>
+  <Card title="Share with Community" icon="users">
+    Contribute to the open-source ecosystem and help others
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Setup Development" href="/pieces/setup-development" icon="code">
+    Set up your local development environment
+  </Card>
+  <Card title="Create a Piece" href="/pieces/create-piece" icon="plus">
+    Learn how to create your first piece
+  </Card>
+  <Card title="Authentication" href="/pieces/authentication" icon="key">
+    Add authentication to your piece
+  </Card>
+  <Card title="Create Actions" href="/pieces/create-action" icon="play">
+    Build actions that perform operations
+  </Card>
+</CardGroup>

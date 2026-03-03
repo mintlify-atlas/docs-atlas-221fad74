@@ -1,0 +1,458 @@
+---
+title: 'Users & Permissions'
+description: 'Manage users, roles, and permissions with RBAC'
+icon: 'shield-halved'
+---
+
+Activepieces implements Role-Based Access Control (RBAC) at both platform and project levels, providing fine-grained control over user permissions.
+
+## User Roles Hierarchy
+
+<Steps>
+  <Step title="Platform Roles">
+    Global roles that apply across all projects:
+    
+    - **ADMIN**: Full platform control
+    - **OPERATOR**: Manage projects and users
+    - **MEMBER**: Regular user access
+  </Step>
+  
+  <Step title="Project Roles">
+    Project-specific roles with granular permissions:
+    
+    - **Admin**: Full project control
+    - **Editor**: Create and modify flows
+    - **Viewer**: Read-only access
+  </Step>
+</Steps>
+
+## Default Project Roles
+
+Activepieces provides three built-in project roles:
+
+<Tabs>
+  <Tab title="Admin">
+    ### Admin Role
+    
+    Full control over the project:
+    
+    **Permissions:**
+    - ✅ READ_FLOW / WRITE_FLOW
+    - ✅ UPDATE_FLOW_STATUS
+    - ✅ READ_APP_CONNECTION / WRITE_APP_CONNECTION
+    - ✅ READ_PROJECT_MEMBER / WRITE_PROJECT_MEMBER
+    - ✅ WRITE_INVITATION / READ_INVITATION
+    - ✅ WRITE_PROJECT_RELEASE / READ_PROJECT_RELEASE
+    - ✅ READ_RUN / WRITE_RUN
+    - ✅ WRITE_ALERT / READ_ALERT
+    - ✅ WRITE_PROJECT / READ_PROJECT
+    - ✅ WRITE_FOLDER / READ_FOLDER
+    - ✅ READ_TABLE / WRITE_TABLE
+    - ✅ READ_MCP / WRITE_MCP
+    
+    **Use Cases:**
+    - Project owners
+    - Team leads
+    - Department heads
+  </Tab>
+  
+  <Tab title="Editor">
+    ### Editor Role
+    
+    Create and modify project content:
+    
+    **Permissions:**
+    - ✅ READ_FLOW / WRITE_FLOW
+    - ✅ UPDATE_FLOW_STATUS
+    - ✅ READ_APP_CONNECTION / WRITE_APP_CONNECTION
+    - ✅ READ_PROJECT_MEMBER
+    - ✅ READ_INVITATION
+    - ✅ WRITE_PROJECT_RELEASE / READ_PROJECT_RELEASE
+    - ✅ READ_RUN / WRITE_RUN
+    - ✅ READ_PROJECT
+    - ✅ WRITE_FOLDER / READ_FOLDER
+    - ✅ READ_TABLE / WRITE_TABLE
+    - ✅ READ_MCP / WRITE_MCP
+    - ❌ Cannot manage members
+    - ❌ Cannot send invitations
+    - ❌ Cannot modify project settings
+    
+    **Use Cases:**
+    - Automation developers
+    - Integration builders
+    - Operations teams
+  </Tab>
+  
+  <Tab title="Viewer">
+    ### Viewer Role
+    
+    Read-only access to project resources:
+    
+    **Permissions:**
+    - ✅ READ_FLOW
+    - ✅ READ_APP_CONNECTION
+    - ✅ READ_PROJECT_MEMBER
+    - ✅ READ_INVITATION
+    - ✅ READ_PROJECT
+    - ✅ READ_RUN
+    - ✅ READ_FOLDER
+    - ✅ READ_TABLE
+    - ✅ READ_MCP
+    - ❌ No write permissions
+    
+    **Use Cases:**
+    - Stakeholders
+    - Auditors
+    - Observers
+  </Tab>
+</Tabs>
+
+## Permission Model
+
+Activepieces uses a comprehensive permission system:
+
+### Resource Permissions
+
+<AccordionGroup>
+  <Accordion title="Flow Permissions">
+    - `READ_FLOW`: View flow definitions
+    - `WRITE_FLOW`: Create and edit flows
+    - `UPDATE_FLOW_STATUS`: Enable/disable flows
+  </Accordion>
+  
+  <Accordion title="Connection Permissions">
+    - `READ_APP_CONNECTION`: View connections (without credentials)
+    - `WRITE_APP_CONNECTION`: Create and manage connections
+  </Accordion>
+  
+  <Accordion title="Member Permissions">
+    - `READ_PROJECT_MEMBER`: View project members
+    - `WRITE_PROJECT_MEMBER`: Add/remove members, change roles
+    - `READ_INVITATION`: View pending invitations
+    - `WRITE_INVITATION`: Send and manage invitations
+  </Accordion>
+  
+  <Accordion title="Run Permissions">
+    - `READ_RUN`: View execution logs
+    - `WRITE_RUN`: Trigger manual runs, retry failed runs
+  </Accordion>
+  
+  <Accordion title="Project Permissions">
+    - `READ_PROJECT`: View project details
+    - `WRITE_PROJECT`: Modify project settings
+  </Accordion>
+  
+  <Accordion title="Release Permissions">
+    - `READ_PROJECT_RELEASE`: View releases
+    - `WRITE_PROJECT_RELEASE`: Create and deploy releases
+  </Accordion>
+  
+  <Accordion title="Additional Permissions">
+    - `READ_FOLDER` / `WRITE_FOLDER`: Manage flow organization
+    - `READ_ALERT` / `WRITE_ALERT`: Configure alerting
+    - `READ_TABLE` / `WRITE_TABLE`: Access project data storage
+    - `READ_MCP` / `WRITE_MCP`: Manage MCP integrations
+  </Accordion>
+</AccordionGroup>
+
+## Custom Roles
+
+Create custom roles with specific permission sets:
+
+```typescript
+{
+  name: "Integration Specialist",
+  type: RoleType.CUSTOM,
+  platformId: "platform_123",
+  permissions: [
+    "READ_FLOW",
+    "WRITE_FLOW",
+    "READ_APP_CONNECTION",
+    "WRITE_APP_CONNECTION",
+    "READ_RUN"
+  ]
+}
+```
+
+<Info>
+Custom roles are available in Enterprise Edition and allow you to create roles tailored to your organization's needs.
+</Info>
+
+## Managing Project Members
+
+### Adding Members
+
+<Steps>
+  <Step title="Invite User">
+    Send an invitation with a role:
+    
+    ```typescript
+    {
+      email: "user@company.com",
+      projectId: "proj_abc123",
+      projectRoleId: "role_editor"
+    }
+    ```
+  </Step>
+  
+  <Step title="User Accepts">
+    User receives email and accepts invitation
+  </Step>
+  
+  <Step title="Member Created">
+    Project member record is created:
+    
+    ```typescript
+    {
+      id: "member_xyz",
+      userId: "user_123",
+      projectId: "proj_abc123",
+      projectRoleId: "role_editor",
+      platformId: "platform_123"
+    }
+    ```
+  </Step>
+</Steps>
+
+### Updating Member Roles
+
+Change a member's role:
+
+```typescript
+// Promote to Admin
+{
+  id: "member_xyz",
+  projectId: "proj_abc123",
+  role: "Admin"
+}
+```
+
+### Removing Members
+
+Delete project member to revoke access:
+
+```bash
+DELETE /v1/projects/{projectId}/members/{memberId}
+```
+
+## Role Resolution Logic
+
+Activepieces determines project access through a hierarchy:
+
+<Steps>
+  <Step title="Project Owner Check">
+    If user is the project owner → **Admin** role
+  </Step>
+  
+  <Step title="Platform Admin Check">
+    If user is Platform Admin → **Admin** role
+  </Step>
+  
+  <Step title="Platform Operator Check">
+    If user is Platform Operator → **Editor** role
+  </Step>
+  
+  <Step title="Project Member Check">
+    If user is a project member → Use assigned project role
+  </Step>
+  
+  <Step title="No Access">
+    Otherwise → No access to project
+  </Step>
+</Steps>
+
+<Warning>
+Platform-level roles (Admin, Operator) automatically grant elevated permissions in all projects within that platform.
+</Warning>
+
+## Team Management
+
+### Listing Members
+
+Get all members with their roles:
+
+```typescript
+{
+  data: [
+    {
+      id: "member_1",
+      user: {
+        id: "user_123",
+        email: "alice@company.com",
+        firstName: "Alice",
+        lastName: "Smith"
+      },
+      projectRole: {
+        name: "Admin",
+        permissions: [...]
+      },
+      project: {
+        id: "proj_abc123",
+        displayName: "Marketing Team"
+      }
+    }
+  ],
+  next: null
+}
+```
+
+### User Analytics
+
+Track active users per project:
+
+```typescript
+{
+  totalUsers: 8,      // All members
+  activeUsers: 5      // Members who logged in recently
+}
+```
+
+## User Invitations
+
+### Invitation Flow
+
+<Steps>
+  <Step title="Create Invitation">
+    ```typescript
+    {
+      email: "newuser@company.com",
+      type: InvitationType.PROJECT,
+      platformId: "platform_123",
+      projectId: "proj_abc123",
+      projectRoleId: "role_editor"
+    }
+    ```
+  </Step>
+  
+  <Step title="Email Sent">
+    Invitation email sent to user
+  </Step>
+  
+  <Step title="User Signs Up">
+    New user creates account or existing user logs in
+  </Step>
+  
+  <Step title="Provisioning">
+    System automatically:
+    - Creates project member
+    - Assigns specified role
+    - Deletes invitation
+  </Step>
+</Steps>
+
+### Invitation Types
+
+<Tabs>
+  <Tab title="Platform Invitation">
+    Invites user to the platform without specific project:
+    
+    ```typescript
+    {
+      type: InvitationType.PLATFORM,
+      platformRole: PlatformRole.MEMBER
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Project Invitation">
+    Invites user to specific project:
+    
+    ```typescript
+    {
+      type: InvitationType.PROJECT,
+      projectId: "proj_abc123",
+      projectRoleId: "role_editor"
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Permission Checking
+
+Implement permission checks in your code:
+
+```typescript
+// Check if user has specific permission
+const hasPermission = projectRole.permissions.includes(
+  Permission.WRITE_FLOW
+)
+
+// Get user's role in project
+const role = await projectMemberService.getRole({
+  userId: "user_123",
+  projectId: "proj_abc123"
+})
+```
+
+## API Reference
+
+<CodeGroup>
+```bash List Members
+curl -X GET 'https://api.activepieces.com/v1/projects/{projectId}/members' \
+  -H 'Authorization: Bearer {token}'
+```
+
+```bash Add Member
+curl -X POST 'https://api.activepieces.com/v1/projects/{projectId}/members' \
+  -H 'Authorization: Bearer {token}' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "userId": "user_123",
+    "projectRoleName": "Editor"
+  }'
+```
+
+```bash Update Member Role
+curl -X PATCH 'https://api.activepieces.com/v1/projects/{projectId}/members/{memberId}' \
+  -H 'Authorization: Bearer {token}' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "role": "Admin"
+  }'
+```
+
+```bash Create Role
+curl -X POST 'https://api.activepieces.com/v1/project-roles' \
+  -H 'Authorization: Bearer {token}' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name": "Integration Specialist",
+    "permissions": ["READ_FLOW", "WRITE_FLOW"],
+    "platformId": "platform_123"
+  }'
+```
+</CodeGroup>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Least Privilege" icon="lock">
+    Grant users the minimum permissions needed for their role.
+  </Card>
+  
+  <Card title="Regular Audits" icon="magnifying-glass">
+    Review member lists and permissions quarterly.
+  </Card>
+  
+  <Card title="Role Standardization" icon="copy">
+    Use default roles when possible; create custom roles sparingly.
+  </Card>
+  
+  <Card title="Owner Designation" icon="crown">
+    Assign project ownership to responsible team leads.
+  </Card>
+</CardGroup>
+
+## Related Topics
+
+<CardGroup cols={3}>
+  <Card title="Project Management" icon="folder-tree" href="/admin/projects">
+    Set up project structure
+  </Card>
+  <Card title="SSO Configuration" icon="key" href="/admin/sso">
+    Enable single sign-on
+  </Card>
+  <Card title="Audit Logs" icon="list" href="/admin/audit-logs">
+    Track permission changes
+  </Card>
+</CardGroup>
